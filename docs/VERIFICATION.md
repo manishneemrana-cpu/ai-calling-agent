@@ -116,6 +116,86 @@ See `COMPLIANCE.md` for the full non-legal-advice summary and the explicit discl
 
 ---
 
+## 7. Expanded telephony-provider sweep — researched 2026-09-21 (founder-requested follow-up #2)
+
+Founder pushed back on a Plivo-or-Exotel-only telephony choice and asked for a wide sweep of affordable India voice telephony options, evaluated the same way STT/TTS/LLM already are: swappable adapters, ranked by verified cost, with real-time bidirectional streaming media as a hard gate (not just IVR/recording/webhook callbacks). All findings below are from live web search on 2026-09-21; direct fetches to several vendor pricing pages (plivo.com) were blocked by this environment's egress proxy, so vendor-site numbers below are as captured in third-party/aggregator search snippets and vendor marketing copy indexed by search — **treat every rate as needing a final vendor-console/sales confirmation before Phase 2 commits code to a specific adapter**, same caveat as §1.
+
+**Hard filter applied**: a provider that only offers call recording, post-call transcription, basic IVR/XML flows, or webhook callbacks — without a live, bidirectional audio WebSocket (or equivalent low-latency media stream) that a bot can both read from and write to *during* the call — cannot support this platform's real-time conversational AI pipeline. Such providers are flagged explicitly and excluded from the ranked list in STACK_PROPOSAL.md, regardless of how cheap they are.
+
+### 7.1 Plivo — re-verified, now with a confirmed rate
+- **Pricing (confirmed this pass)**: **₹0.60/min** for India voice (SIP trunking, inbound and outbound), per-second billing, no minimum spend/contract. Streaming add-on remains **$0.004/min (~₹0.35/min)** as recorded in §1.1. Combined telephony cost ≈ **₹0.95/min** — this matches the Phase 0 *benchmark estimate* almost exactly, which is a useful cross-check that the earlier ₹0.60 assumption was reasonable, but this is still a search-snippet figure, not a console/sales-confirmed quote.
+- **Streaming**: confirmed (§1.1, unchanged).
+- **DLT/DND**: unchanged from §1.1 — compliance responsibility sits mostly with the customer.
+- Sources: [Plivo India Voice API Pricing](https://www.plivo.com/voice/pricing/in/), [Plivo SIP Trunking Pricing India](https://www.plivo.com/sip-trunking/pricing/in/), [Plivo Pricing guide 2026 — CloudTalk](https://www.cloudtalk.io/blog/plivo-pricing/)
+
+### 7.2 FreJun Teler — new cheapest verified streaming-capable option found
+- **Pricing**: **₹0.15/min outbound, ₹0.10/min inbound**, **₹0.15/min media-streaming add-on**, ₹0.04/min optional recording/storage. Channels billed at ₹600/channel/month, **minimum 10 channels** to go to production. Numbers procured in batches of 20, **minimum 12-month commitment**, requires 5 Aadhaar cards submitted per 20 DIDs (KYC-heavy but not enterprise-only — a funded startup can meet this). First 3,000 minutes free (~₹450 of credit).
+- **Streaming**: confirmed — "raw WebSocket streaming that works with any AI stack," explicitly marketed for building voice-AI agents (Pipecat-compatible per their own comparison content).
+- **DLT/DND**: marketed as handled natively (DLT registration, DND scrubbing, consent management) rather than left to the customer — a genuine differentiator if confirmed in a sales call, since Plivo/Exotel push more of this burden onto the tenant.
+- **Caveat**: FreJun/Teler is a smaller, newer India CPaaS brand than Plivo/Exotel/Tata — less production track record than the incumbents, and the founder should sanity-check uptime/SLA and support responsiveness with a paid pilot before routing production traffic, not just trust the marketing numbers.
+- Sources: [FreJun Pricing — Dialer and Teler Voice API Plans](https://frejun.com/pricing/), [FreJun India Pricing Models](https://knowledge.frejun.com/frejun-india-plans-and-pricing), [FreJun SIP Trunk Providers guide](https://frejun.com/sip-trunk-providers-india/), [FreJun Voice API India guide](https://frejun.com/teler-blog/voice-api-india/)
+
+### 7.3 Exotel — unchanged from §1.2
+- Still no public per-minute rate; third-party estimate ₹0.60–₹1.80/min depending on route. Streaming confirmed via AgentStream. See §1.2 for full detail; not re-verified further in this pass since nothing new was found.
+
+### 7.4 Tata Tele Business Services / Smartflo
+- **Pricing**: no single clean per-minute API rate found; blended estimate from aggregators is **₹0.40–₹0.80/min** for outbound. Their bundled "Cloudphone" channel plans show incremental per-minute rates of ₹0.30–₹0.50/min once a plan's included minutes are used, on top of a ₹500–₹850/channel/month rental — i.e. it is priced more like a PBX/contact-center product than a pure metered voice API, so a true apples-to-apples ₹/min number needs a sales quote for the Voice-Streaming-specific API tier.
+- **Streaming**: **confirmed directly from Tata's own developer docs** — a documented "SOP for Voice Streaming" describes genuine bidirectional low-latency audio over WebSocket, 8kHz μ-law (PCMU) both directions, with static or dynamic per-call WebSocket endpoint configuration — architecturally equivalent to Plivo's `<Stream>`/Exotel's AgentStream. This is a real, usable option, not just IVR.
+- **DLT/DND**: as a licensed telecom operator (not just a CPaaS reseller), Tata Tele has direct DLT/TRAI registration infrastructure and markets compliance tooling for BFSI/enterprise customers; exact self-serve tooling for a startup-scale AI calling tenant needs a sales conversation.
+- **Verdict**: viable, streaming-confirmed, but pricing requires a sales quote to pin down for the Voice Streaming API tier specifically (not just the generic Cloudphone plans found).
+- Sources: [Smartflo Voice Streaming SOP](https://docs.smartflo.tatatelebusiness.com/docs/copy-of-standard-operating-procedure-sop-for-voice-streaming), [Tata Smartflo pricing 2026 — itforsme](https://www.itforsme.in/pricing/tata-smartflo-india), [Building an Agentic AI Calling System with Tata Smartflo](https://medium.com/@chaubeydeepak903/building-an-agentic-ai-calling-system-with-tata-smartflo-twilio-and-exotel-6d9b498a08a5)
+
+### 7.5 Servetel / Acefone — streaming confirmed, pricing requires sales contact
+- Servetel is marketed (per one comparison source) as "by Acefone" — Acefone is the underlying platform/brand. Acefone publishes a dedicated **"Voice Streaming API for AI Voice Bots"** product page and its own **"SOP for Voice Streaming"** developer doc (structurally similar to Tata Smartflo's, suggesting shared/adjacent underlying infrastructure vendors in this space) describing genuine bidirectional real-time audio streaming — the bot can interrupt, ask follow-ups, and handle live responses without call drops.
+- **Pricing**: **no public per-minute rate found** for the Voice Streaming API specifically — Acefone's own pricing page routes to a custom quote ("once their team gets a hold of your requirements, they can share a tailored subscription plan"). Servetel's base plans start ~₹999/month but that is for basic cloud-telephony/IVR, not confirmed to include the streaming API tier. **Marked "pricing requires sales contact, no public rate" per the task's rule — no number is guessed here.**
+- **Streaming**: confirmed.
+- **DLT/DND**: not confirmed in this search; needs direct follow-up.
+- Sources: [Acefone Voice Streaming API](https://www.acefone.com/products/voice-streaming/), [Acefone Voice Streaming SOP](https://docs.acefone.in/docs/standard-operating-procedure-sop-for-voice-streaming), [Acefone AI Voice Bot Pricing](https://www.acefone.com/pricing/ai-voice-bot/), [Servetel overview — SoftwareSuggest](https://www.softwaresuggest.com/servetel)
+
+### 7.6 Ozonetel — likely streaming-capable, not conclusively confirmed from Ozonetel's own technical docs
+- Ozonetel markets "Voice AI Agents" and a voicebot-integration product, and third-party comparison content (caller.digital, ElevenLabs' own Ozonetel integration page) describes bidirectional-streaming-style architecture similar to Exotel's AgentStream. However, this search did **not** turn up Ozonetel's own primary technical documentation (equivalent to Tata's or Acefone's public "SOP for Voice Streaming" pages) spelling out the exact WebSocket/audio-format contract.
+- **Pricing**: subscription-tiered ($25–$55/agent/month) plus usage-based call-minute charges; **no confirmed India per-minute voice rate** found — needs a sales quote.
+- **Verdict**: plausible streaming candidate (ElevenLabs itself lists a direct Ozonetel integration, which is a meaningful signal), but **flagged as "streaming capability needs a hands-on technical confirmation before adoption"** rather than fully confirmed like Plivo/Exotel/Tata/Acefone/FreJun.
+- Sources: [Connect Ozonetel to ElevenLabs AI Voice Agents](https://elevenlabs.io/agents/integrations/ozonetel), [Ozonetel Voice AI Agents](https://ozonetel.com/voice-ai-agents/), [Ozonetel Pricing guide 2026 — CloudTalk](https://www.cloudtalk.io/blog/ozonetel-pricing/)
+
+### 7.7 Knowlarity (SuperReceptionist) — EXCLUDED: no confirmed real-time streaming
+- **Pricing**: agent-license model (₹1,999–₹3,499/agent/month) plus outbound minute charges estimated at ₹0.40–₹0.80/min by aggregators; DIDs ₹500–₹2,500/month extra. No confirmed India per-minute API-only rate.
+- **Streaming**: **not confirmed anywhere in this search.** Knowlarity's public developer reference (developer.knowlarity.com) and marketing pages describe IVR, click-to-call, virtual numbers, call recording, and a "voicebot"/"AI bots" product line, but no public documentation surfaced describing a bidirectional real-time audio WebSocket contract analogous to Plivo's `<Stream>`, Exotel's AgentStream, or Tata/Acefone's Voice Streaming SOPs.
+- **Verdict**: **excluded from the viable/streaming-capable ranked list.** This does not mean Knowlarity definitely cannot do it — SuperReceptionist is primarily an IVR/call-center/virtual-receptionist product, and their "voicebot" may turn out to be scripted-IVR-style rather than live bidirectional audio — but absent public confirmation, it cannot be assumed to support the real-time conversational pipeline this platform needs. A direct sales/technical conversation would be needed before reconsidering it.
+- Sources: [Knowlarity Pricing](https://www.knowlarity.com/pricing/voice), [Knowlarity API Reference](https://developer.knowlarity.com/), [Knowlarity — Techjockey 2026](https://www.techjockey.com/detail/knowlarity-superreceptionist)
+
+### 7.8 Airtel IQ — EXCLUDED (for now): no confirmed real-time audio-streaming API for PSTN voice bots
+- **Pricing**: pay-as-you-go, usage-dependent; no public per-minute voice rate found — sales-quote only.
+- **Streaming**: Airtel IQ's public API docs and GitHub samples found in this search cover **call-flow/IVR APIs** (`callflow-component-apis`), one-to-one **video/WebRTC calling** (Room/Stream concepts for in-app video, not PSTN voice bots), and click-to-call. No public documentation was found describing a bidirectional raw-audio WebSocket for a live PSTN voice AI agent, comparable to what Plivo/Exotel/Tata/Acefone publish. Airtel IQ does list third-party "voicebot" partner solutions (e.g. VoiceGenie) in its partner marketplace, which suggests *some* path to voice AI exists, but that appears to route through a partner's own infrastructure rather than a first-party Airtel IQ streaming-media API.
+- **Verdict**: **excluded from the confirmed-streaming list pending direct technical confirmation.** Cost alone would not matter here even if cheap, since the core real-time-audio requirement is unverified.
+- Sources: [Airtel IQ API Docs — Call Flow Component APIs](https://www.airtel.in/business/b2b/airtel-iq/api-docs/voice/callflow-component-apis), [Airtel IQ Partner Listing (VoiceGenie)](https://www.airtel.in/business/b2b/airtel-iq-partner-listing/wa-voicebotsolution/?icid=orir&id=25), [Airtel Business Voice API blog](https://www.airtel.in/b2b/insights/blogs/what-is-programmable-voice-api-and-how-does-it-work/)
+
+### 7.9 MyOperator — EXCLUDED: IVR/call-center product, no confirmed streaming
+- **Pricing**: tiered plans ₹2,500–₹55,000/month plus ~₹0.80/min calling cost "including IVR service time," AI-agent add-on ₹10,000/agent.
+- **Streaming**: **not confirmed.** All public material found describes IVR, call routing, call recording, call logs, and a general-purpose integration API for pulling call data — not a live bidirectional audio WebSocket. This reads as a traditional cloud-PBX/call-center product, not a real-time voice-AI media platform.
+- **Verdict**: **excluded** — positioned for human-agent call centers with IVR front-ends, not real-time AI voice streaming. Cost is moot given the missing capability.
+- Sources: [MyOperator Pricing](https://myoperator.com/pricing), [MyOperator Pricing breakdown — Bonvoice](https://bonvoice.com/insights/myoperator-pricing/)
+
+### 7.10 Twilio (India) — comparison/global-fallback, confirmed streaming, not cost-competitive for India-only volume
+- **Pricing**: India voice ≈ **₹0.35/min inbound, ₹0.65/min outbound** (landline) or, in USD terms, ~$0.0045/min inbound / $0.0075/min outbound to Indian mobiles (~₹0.40 / ₹0.66 at ₹88/$1). Indian phone numbers $2/month.
+- **Streaming**: confirmed — Twilio's `<Stream>` / Media Streams is the original version of the same bidirectional-WebSocket pattern Plivo/Exotel later adopted; extremely well-documented, Pipecat has first-party Twilio support.
+- **Verdict**: technically excellent and well-proven, and its raw India voice rate is actually competitive with Plivo's — but Twilio is a global platform without India-specific DLT/DND/TRAI compliance tooling built for the Indian regulatory regime the way an India-licensed OSP is, and settlement/billing is USD-denominated (FX risk). Kept as the **documented global-fallback/comparison alternate**, not promoted into the India-primary ranking.
+- Sources: [Twilio Voice Pricing 2026 guide — Edesy](https://edesy.in/blog/twilio-voice-pricing-guide-2026), [Twilio Voice Pricing docs](https://www.twilio.com/docs/voice/pricing)
+
+### 7.11 Direct SIP trunk (Airtel Business / Jio / Tata Communications / BSNL)
+- All four offer enterprise SIP trunking (Jio scaling 10–5,000 concurrent sessions, Airtel over dedicated fiber/MPLS with 99.9% uptime SLA). **No self-serve, published per-minute API pricing was found for any of them** — these require a direct enterprise sales relationship, minimum channel/session commitments, and typically a dedicated circuit or MPLS link, not a signup-and-get-an-API-key flow.
+- **Realistic assessment for a startup**: **not a Phase 1/2 option.** These trunks are built for enterprises already running their own PBX/SBC infrastructure and negotiating volume contracts — there is no lightweight adapter to build against without first signing a business-grade telecom contract (KYC, dedicated circuit provisioning lead time, minimum revenue commitments). This is the "enterprise-only" tier the task asked to flag as distinct from the CPaaS options above (Plivo/FreJun/Exotel/Tata Smartflo/Acefone), which all offer instant self-serve API signup on top of exactly this kind of underlying carrier infrastructure. Revisit direct SIP only once call volume is large enough (likely 100K+ min/month) to justify the sales cycle and negotiate a rate meaningfully below the CPaaS layer's markup.
+- Sources: [Jio SIP Trunk](https://www.jio.com/business/services/voice-and-collaboration/sip-trunk/), [Airtel SIP Trunk](https://www.airtel.in/b2b/sip-trunk), [Best SIP Trunk Providers India 2026 — didlogic](https://didlogic.com/blog/best-sip-trunk-provider-india/)
+
+### 7.12 Kaleyra, Route Mobile, Karix — skipped per task instructions (no findable public per-minute voice-streaming pricing)
+- Kaleyra: one comparison source explicitly states its "WebSocket audio streaming support for real-time AI voice agents is limited," and no public per-minute India voice rate was found — both a capability caveat and a pricing gap. Not adopted.
+- Route Mobile / Karix: no findable public per-minute voice pricing or streaming-capability documentation surfaced in this search. Per the task's instruction to skip these if pricing isn't findable, they are **not** added to the ranked list; a direct sales inquiry would be needed to evaluate either further.
+- Sources: [Kaleyra alternatives — Rich Automate 2026](https://richautomate.in/blog/kaleyra-alternative-india-2026)
+
+**Net verdict for §7**: **FreJun Teler is the cheapest confirmed streaming-capable India option found** (≈₹0.28/min for voice+streaming vs. Plivo's ≈₹0.95/min), followed by Plivo (best-documented/most mainstream), then Exotel and Tata Smartflo (both streaming-confirmed but pricing requires a sales quote), then Acefone/Servetel (streaming-confirmed, pricing sales-only), then Ozonetel (plausible but technically unconfirmed), then Twilio (confirmed but not India-optimized/FX risk). Knowlarity, Airtel IQ, and MyOperator are **excluded** for lack of any public evidence of real-time bidirectional audio streaming — they read as IVR/call-center/recording products. Direct SIP trunking (Airtel/Jio/Tata Comm/BSNL) is enterprise-only and not viable for Phase 1/2. See `STACK_PROPOSAL.md` for the resulting ranked adapter list and `COST_MODEL_V1.md` for the recomputed Economy-tier figure using FreJun Teler's verified rate.
+
+---
+
 ## 8. Alternative/affordable providers — researched 2026-09-21 (founder-requested follow-up)
 
 Founder asked specifically about "voicebox," plus a broader sweep of affordable/alternative STT/TTS/LLM-realtime options against the "human-like, cheap, streaming-capable" bar. Findings below; **none displace the Plivo/Sarvam/Gemini/Pipecat default**, for the reasons stated per item, but two (Smallest.ai, Bhashini) are worth tracking as future swappable alternates.
@@ -177,12 +257,16 @@ There are at least three unrelated things called "Voicebox," and none is a usabl
 
 ## 9. Open items to re-verify before Phase 1 build starts
 
-1. Exact current Plivo India per-minute inbound/outbound voice rate (blocked by egress proxy during this session — needs console login or sales contact).
+1. Plivo's ₹0.60/min India rate was found via search snippet in the 2026-09-21 follow-up (§7.1) but direct fetch to plivo.com was still blocked by this environment's egress proxy — confirm via console login or sales contact before final commitment.
 2. Exact current Exotel India per-minute voice rate (Exotel does not publish; needs a sales quote).
-3. Confirm active Sarvam STT model name (Saarika v2.5 → Saaras v3 migration) and its current per-minute pricing at integration time.
-4. Confirm Gemini's post-2026-10-16 successor model name/pricing (2.5 Flash-Lite/Flash are being retired within weeks of this document).
-5. Confirm whether Groq Llama 3.3 70B enterprise pricing is reachable/affordable for this project's volume, or whether 3.1-8B-Instant (or another vendor) should be the sole Groq-hosted alternate.
-6. Get written confirmation from Plivo/Exotel on their DLT-registration-assist and DND-scrubbing tooling specifically for AI/bot-originated outbound calls (not just human agent call centers).
-7. Legal review of Piper's GPL-3.0 relicensing (post Oct 2025) and per-voice-model license terms before using it as a self-hosted TTS in a commercial SaaS.
-8. Hands-on Phase 1 spike: confirm whether Bhashini's government-tier API supports real-time streaming ASR/TTS suitable for a live barge-in call (unconfirmed in §8.5) — if yes, it's a candidate free/near-free Economy STT/TTS alternate for Indian-language tenants.
-9. Hands-on Phase 1 eval: Smallest.ai TTS quality/latency/Hinglish-handling head-to-head against Sarvam Bulbul (§8.2) — decide whether it's worth adding as a documented alternate.
+3. FreJun Teler's ₹0.15/₹0.10/₹0.15-per-min (outbound/inbound/streaming) rates and native DLT/DND-handling claim (§7.2) — confirmed only via search-indexed vendor marketing pages, not a sales call or paid pilot; verify uptime/SLA and support track record given it is a newer, smaller brand than the incumbents, before routing production traffic.
+4. Tata Smartflo's and Acefone/Servetel's Voice Streaming API per-minute pricing (both confirmed technically streaming-capable in §7.4/§7.5, but pricing requires a direct sales quote — not found publicly).
+5. Ozonetel's own first-party bidirectional-streaming technical documentation (§7.6) — plausible via third-party/partner signals (ElevenLabs integration) but not confirmed from Ozonetel's own docs the way Tata/Acefone/Plivo/Exotel are.
+6. A direct technical/sales confirmation for Knowlarity and Airtel IQ on whether either has *any* first-party bidirectional real-time audio-streaming API — both were excluded in §7.7/§7.8 for lack of public evidence, but that is an evidence gap, not a confirmed "no."
+7. Confirm active Sarvam STT model name (Saarika v2.5 → Saaras v3 migration) and its current per-minute pricing at integration time.
+8. Confirm Gemini's post-2026-10-16 successor model name/pricing (2.5 Flash-Lite/Flash are being retired within weeks of this document).
+9. Confirm whether Groq Llama 3.3 70B enterprise pricing is reachable/affordable for this project's volume, or whether 3.1-8B-Instant (or another vendor) should be the sole Groq-hosted alternate.
+10. Get written confirmation from Plivo/Exotel/FreJun/Tata/Acefone on their DLT-registration-assist and DND-scrubbing tooling specifically for AI/bot-originated outbound calls (not just human agent call centers).
+11. Legal review of Piper's GPL-3.0 relicensing (post Oct 2025) and per-voice-model license terms before using it as a self-hosted TTS in a commercial SaaS.
+12. Hands-on Phase 1 spike: confirm whether Bhashini's government-tier API supports real-time streaming ASR/TTS suitable for a live barge-in call (unconfirmed in §8.5) — if yes, it's a candidate free/near-free Economy STT/TTS alternate for Indian-language tenants.
+13. Hands-on Phase 1 eval: Smallest.ai TTS quality/latency/Hinglish-handling head-to-head against Sarvam Bulbul (§8.2) — decide whether it's worth adding as a documented alternate.

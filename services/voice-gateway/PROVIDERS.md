@@ -9,9 +9,42 @@ about the seam between "core pipeline" and "provider-specific code".
 from typing import Protocol, AsyncIterator
 
 class TelephonyAdapter(Protocol):
-    """One implementation per provider: PlivoTelephonyAdapter (primary),
-    ExotelTelephonyAdapter (alternate). Selected at call time from
-    agents.telephony_provider_key, never hardcoded."""
+    """One implementation per provider. Per the 2026-09-21 telephony research
+    (docs/VERIFICATION.md §7, docs/STACK_PROPOSAL.md's ranked telephony list),
+    Phase 2 will implement the top-ranked 2-3 of these confirmed
+    streaming-capable providers, cheapest-first:
+
+      1. FreJunTelerTelephonyAdapter (recommended starting default — cheapest
+         verified, streaming-confirmed option, ~₹0.28-0.30/min; newer/smaller
+         brand, needs a paid pilot before full production trust)
+      2. PlivoTelephonyAdapter (fallback/alternate — most mainstream,
+         best-documented, first-party Pipecat serializer, ~₹0.95/min)
+      3. ExotelTelephonyAdapter (alternate — streaming-confirmed via
+         AgentStream, pricing is sales-quote-only)
+      4. TataSmartfloTelephonyAdapter (alternate — streaming-confirmed
+         directly from Tata's own developer docs, pricing sales-quote-only,
+         backed by a licensed telecom operator)
+      5. AcefoneTelephonyAdapter (alternate — streaming-confirmed via
+         Acefone's own Voice Streaming API/SOP docs; Servetel is a reseller
+         brand of this platform; pricing sales-quote-only)
+      6. OzonetelTelephonyAdapter (watch — plausible streaming support via
+         partner signals, e.g. its own ElevenLabs integration, but not
+         confirmed from Ozonetel's own technical docs; needs a hands-on spike
+         before implementation)
+      7. TwilioTelephonyAdapter (global-fallback/comparison — streaming
+         confirmed, but not India-optimized: no India-specific DLT/DND
+         tooling, USD-denominated billing)
+
+    Explicitly NOT planned as adapters (excluded — no confirmed real-time
+    bidirectional audio streaming, only IVR/recording/call-flow APIs found):
+    Knowlarity (SuperReceptionist), Airtel IQ, MyOperator. Direct SIP
+    trunking (Airtel Business / Jio / Tata Communications / BSNL) is
+    enterprise-only (no self-serve signup) and not viable at this stage.
+    Kaleyra/Route Mobile/Karix were skipped: no findable public per-minute
+    India voice-streaming pricing.
+
+    Selected at call time from agents.telephony_provider_key, never
+    hardcoded."""
 
     async def place_call(self, to_number: str, from_number: str) -> str:
         """Returns a provider_call_id."""
@@ -68,3 +101,23 @@ concrete adapter class to instantiate. No provider name, model name, price,
 phone number, or secret may be hardcoded in this service's source — this is
 a repeated, non-negotiable rule from `docs/ARCHITECTURE.md` and the
 founder's master prompt.
+
+## Why the `TelephonyAdapter` interface must stay provider-agnostic
+
+The 2026-09-21 telephony research (`docs/VERIFICATION.md` §7) is a direct
+illustration of why this interface cannot collapse to "just implement
+Plivo": the cheapest verified streaming-capable option changed within a
+single research pass (Plivo's long-assumed default position was displaced by
+FreJun Teler on cost, while Exotel/Tata Smartflo/Acefone all turned out to
+be equally streaming-capable, just pricing-unconfirmed). Relative
+provider rankings in India's cloud-telephony market are volatile — new
+entrants, pricing changes, and DLT/DND tooling differences can reorder the
+"cheapest viable" list again before Phase 2 even ships. On top of that, a
+specific tenant or white-label reseller may already hold a negotiated
+contract with a specific provider (e.g. an existing Tata Tele or Airtel
+relationship) that makes it the right choice for that tenant regardless of
+this document's ranking. The adapter interface exists precisely so that
+today's ranking is a config default, never a code dependency — Phase 2
+implementing 2-3 adapters now does not close the door on adding FreJun
+Teler, Ozonetel, or any other provider later without touching the core
+pipeline.
