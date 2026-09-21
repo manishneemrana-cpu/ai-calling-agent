@@ -150,6 +150,46 @@ describe("tenant isolation (RLS)", () => {
     }
   });
 
+  it("org B cannot read org A's tenant_provider_config rows (Phase 2 provider registry)", async () => {
+    await admin.query(
+      `INSERT INTO tenant_provider_config (org_id, layer, provider_key, is_default, priority, config)
+       VALUES ($1, 'telephony', 'mock', true, 1, '{}'::jsonb)`,
+      [orgA]
+    );
+
+    const orgARows = await asTenant(orgA, userA, async (c) => {
+      const { rows } = await c.query("SELECT provider_key FROM tenant_provider_config WHERE org_id = $1", [orgA]);
+      return rows;
+    });
+    expect(orgARows).toHaveLength(1);
+    expect(orgARows[0].provider_key).toBe("mock");
+
+    const orgBRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT * FROM tenant_provider_config");
+      return rows;
+    });
+    expect(orgBRows).toHaveLength(0);
+
+    // org B cannot insert a row claiming to belong to org A either.
+    await expect(
+      asTenant(orgB, userB, async (c) => {
+        await c.query(
+          `INSERT INTO tenant_provider_config (org_id, layer, provider_key) VALUES ($1, 'telephony', 'mock')`,
+          [orgA]
+        );
+      })
+    ).rejects.toThrow();
+  });
+
+  it("the `providers` catalog is readable by every tenant (platform-wide, not tenant data)", async () => {
+    const rows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT provider_key FROM providers WHERE layer = 'telephony'");
+      return rows;
+    });
+    const keys = rows.map((r) => r.provider_key);
+    expect(keys).toEqual(expect.arrayContaining(["mock", "plivo", "frejun_teler"]));
+  });
+
   it("sessions table is not directly readable by app_user at all (only via SECURITY DEFINER functions)", async () => {
     const client = new Client({ connectionString: APP_URL });
     await client.connect();
