@@ -19,6 +19,8 @@ import asyncpg
 from .adapter_map import resolve_adapter_factory
 from .crypto import decrypt_provider_config, is_encrypted_config
 from .db import with_tenant
+from .embedding.adapters import gemini as _embedding_gemini  # noqa: F401
+from .embedding.adapters import mock as _embedding_mock  # noqa: F401
 from .llm.adapters import gemini as _llm_gemini  # noqa: F401
 from .llm.adapters import groq_llama as _llm_groq_llama  # noqa: F401
 from .llm.adapters import mock as _llm_mock  # noqa: F401
@@ -39,7 +41,7 @@ from .tts.adapters import mock as _tts_mock  # noqa: F401
 from .tts.adapters import piper as _tts_piper  # noqa: F401
 from .tts.adapters import sarvam as _tts_sarvam  # noqa: F401
 
-Layer = Literal["telephony", "stt", "tts", "llm"]
+Layer = Literal["telephony", "stt", "tts", "llm", "embedding"]
 
 
 class ProviderNotConfiguredError(Exception):

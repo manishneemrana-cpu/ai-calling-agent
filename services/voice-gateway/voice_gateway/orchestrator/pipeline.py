@@ -24,6 +24,8 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 
+from ..knowledge.grounding import build_grounded_system_prompt
+from ..knowledge.retrieval import RetrievedChunk
 from ..latency import TurnLatencyTracker
 from ..llm.types import LLMProvider, Message, ToolCall, ToolDefinition
 from ..stt.types import STTProvider
@@ -32,6 +34,7 @@ from .barge_in import BargeInController
 from .silence import SilenceMonitor
 
 ToolDispatcher = Callable[[ToolCall], Awaitable[str]]
+KnowledgeRetriever = Callable[[str], Awaitable[list[RetrievedChunk]]]
 
 
 class ConversationOrchestrator:
@@ -47,6 +50,8 @@ class ConversationOrchestrator:
         tools: list[ToolDefinition] | None = None,
         barge_in: BargeInController | None = None,
         silence_monitor: SilenceMonitor | None = None,
+        base_persona_prompt: str | None = None,
+        knowledge_retriever: KnowledgeRetriever | None = None,
     ):
         self.call_id = call_id
         self.stt = stt
@@ -58,6 +63,15 @@ class ConversationOrchestrator:
         self.barge_in = barge_in or BargeInController()
         self.silence_monitor = silence_monitor or SilenceMonitor()
         self.messages: list[Message] = []
+        # Optional RAG/guardrail grounding step (Phase 3.5 Part C — see
+        # voice_gateway/knowledge/grounding.py). Both must be provided
+        # together for grounding to apply; a call with neither (e.g. every
+        # existing Phase 3 mock/test call, and any tenant that hasn't set up
+        # a knowledge base yet) behaves EXACTLY as before this feature
+        # existed — this is additive, not a behavior change for callers
+        # that don't opt in.
+        self.base_persona_prompt = base_persona_prompt
+        self.knowledge_retriever = knowledge_retriever
 
     async def run_turn(self, audio_chunks: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
         """One conversational turn: transcribe the caller's utterance, get
@@ -82,11 +96,28 @@ class ConversationOrchestrator:
         self.silence_monitor.notify_activity(now=time.monotonic())
         self.messages.append(Message(role="user", content=final_text))
 
+        if self.base_persona_prompt is not None and self.knowledge_retriever is not None:
+            await self._apply_grounding(final_text)
+
         first_token_marked = False
         async for audio_chunk in self._reply_and_speak(tracker, first_token_marked):
             yield audio_chunk
 
         tracker.finish()
+
+    async def _apply_grounding(self, user_text: str) -> None:
+        """Retrieves this call's tenant knowledge base for `user_text` and
+        (re)builds the turn's system prompt via
+        `build_grounded_system_prompt()` — replacing any prior system
+        message so each turn's grounding reflects THAT turn's question
+        (retrieval is per-turn, not cached from an earlier question in the
+        same call)."""
+        assert self.base_persona_prompt is not None
+        assert self.knowledge_retriever is not None
+        chunks = await self.knowledge_retriever(user_text)
+        system_prompt = build_grounded_system_prompt(self.base_persona_prompt, chunks)
+        self.messages = [m for m in self.messages if m.role != "system"]
+        self.messages.insert(0, Message(role="system", content=system_prompt))
 
     async def _reply_and_speak(
         self, tracker: TurnLatencyTracker, first_token_marked: bool

@@ -3,6 +3,7 @@ import { withoutTenant } from "@/lib/db/tenant";
 import { resolveAdapterFactory } from "@/lib/providers/adapter-map";
 import { WebhookSignatureError } from "@/lib/providers/telephony/types";
 import { decryptProviderConfig, isEncryptedConfig } from "@/lib/providers/crypto";
+import { notifyCallAnswered } from "@/lib/voice-gateway/client";
 import "@/lib/providers/telephony/adapters/mock";
 import "@/lib/providers/telephony/adapters/plivo";
 import "@/lib/providers/telephony/adapters/frejun-teler";
@@ -104,6 +105,24 @@ export async function POST(
     );
     return rows[0];
   });
+
+  // "Call answered" trigger for the telephony <-> voice-gateway audio
+  // bridge (docs/AUDIO_BRIDGE.md): the FIRST time (was_new guards against a
+  // retried webhook delivery re-triggering this) a call's status becomes
+  // in_progress, tell the voice-gateway to build a ConversationOrchestrator
+  // for it — the provider's own media-stream WebSocket is expected to
+  // connect to services/voice-gateway shortly after, per that call's
+  // provider config (see streamAudio()'s docstring on each adapter). A
+  // voice-gateway outage here must never fail this webhook's response to
+  // the telephony provider (see notifyCallAnswered()'s docstring) — it does
+  // not throw by default.
+  if (result.was_new && result.call_id && result.org_id && event.status === "in_progress") {
+    await notifyCallAnswered({
+      callId: result.call_id,
+      orgId: result.org_id,
+      providerKey,
+    });
+  }
 
   return NextResponse.json({ processed: result.was_new, callId: result.call_id }, { status: 200 });
 }
