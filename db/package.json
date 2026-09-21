@@ -1,0 +1,12 @@
+{
+  "name": "@ai-calling-agent/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Raw SQL migrations for the shared Postgres schema (organizations, users, agents, agent_prompts, leads, calls, provider_accounts, provider_rate_cards, usage_records, cost_records, knowledge_documents, knowledge_chunks, audit_logs).",
+  "scripts": {
+    "migrate": "node migrate.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

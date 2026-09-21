@@ -12,6 +12,37 @@ Real estate is one pre-built persona template among many (and the vertical for t
 
 This is now its own repository: `github.com/manishneemrana-cpu/ai-calling-agent`. Docs were migrated here from a scaffolding stage inside another repo; this is now the canonical home for all code and docs for this product.
 
+- **Phase 0 (discovery/planning): done.** See the documents below.
+- **Phase 1 (foundation — auth, multi-tenancy, database schema, dashboard shell, tenant-isolation tests): done.** See [`docs/PHASE1_DECISIONS.md`](docs/PHASE1_DECISIONS.md) for the stack decisions and reasoning, and the Quickstart below to run it.
+- **Phase 2 (telephony/voice pipeline): next.** `services/voice-gateway/` is scaffolded as a placeholder — see its `README.md` and `PROVIDERS.md`.
+
+## Quickstart
+
+Requires Node.js 22+, and a local PostgreSQL 16 with the `pgvector` extension available (e.g. Debian/Ubuntu: `apt-get install postgresql-16 postgresql-16-pgvector`).
+
+```bash
+# 1. Install dependencies (npm workspaces: apps/web + db)
+npm install
+
+# 2. Create the local database
+sudo -u postgres psql -c "CREATE DATABASE ai_calling_agent;"
+sudo -u postgres psql -d ai_calling_agent -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+
+# 3. Configure env vars
+cp .env.example apps/web/.env.local   # edit if your local Postgres differs from the defaults
+export DATABASE_URL_MIGRATE="postgresql://postgres:postgres@localhost:5432/ai_calling_agent"
+
+# 4. Run migrations (creates schema, RLS policies, the app_user role)
+npm run migrate
+
+# 5. Start the dashboard
+npm run dev -w apps/web
+# -> http://localhost:3000/signup
+
+# Run the tenant-isolation test suite
+npm run test -w apps/web
+```
+
 ## Documents
 
 - [`docs/PHASE0_SUMMARY.md`](docs/PHASE0_SUMMARY.md) — 10-line project understanding + blocking questions for the founder before Phase 1.
