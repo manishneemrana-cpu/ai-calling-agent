@@ -1,6 +1,14 @@
 # Dependencies
 node_modules/
 
+# Python (services/voice-gateway)
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
 # Env files — never commit real secrets
 .env
 .env.local

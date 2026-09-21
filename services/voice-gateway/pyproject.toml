@@ -1,0 +1,50 @@
+[project]
+name = "voice-gateway"
+version = "0.1.0"
+description = "AI Calling Agent — Phase 3 real-time streaming voice pipeline (STT/TTS/LLM provider registry + orchestrator). Separate Python runtime from apps/web (Next.js); shares the same Postgres database."
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.29",
+    "httpx>=0.27",
+    "websockets>=12.0",
+    "cryptography>=42.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+# --- Why requirements.txt is NOT also used --------------------------------
+# pyproject.toml (PEP 621) is the single source of truth for both runtime
+# and dev dependencies here — one file, `pip install -e ".[dev]"` covers
+# everything, and it's the standard apps/web's package.json equivalent for a
+# Python project. A requirements.txt would just duplicate this list with no
+# extra capability we need (no private index, no hash-pinning requirement
+# yet), so it's left out to avoid two files drifting out of sync.
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test fixtures often build long inline JSON/SQL literals for readability
+# (keeping a whole fake payload on one line beats wrapping it); relax the
+# line-length rule there rather than in production adapter code.
+"tests/**" = ["E501"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["voice_gateway*"]

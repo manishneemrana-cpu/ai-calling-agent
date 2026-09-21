@@ -1,12 +1,21 @@
-# Provider adapter interfaces (stub contract, Phase 2/3 implements these)
+# Provider adapter interfaces (Phase 3 status: implemented for stt/tts/llm)
 
-Per `docs/STACK_PROPOSAL.md` §"Adapter interface principle". These are
-**illustrative Python `Protocol` shapes only** — not implemented, not
-imported anywhere, just the agreed contract so Phase 2/3 has no ambiguity
-about the seam between "core pipeline" and "provider-specific code".
+Per `docs/STACK_PROPOSAL.md` §"Adapter interface principle". The shapes
+below were **illustrative-only** when this file was first written in
+Phase 1/2. Phase 3 has since implemented the STT/TTS/LLM contracts for
+real, as `voice_gateway/{stt,tts,llm}/types.py` — the actual `Protocol`s
+the orchestrator (`voice_gateway/orchestrator/pipeline.py`) imports and
+calls, which differ in a few details from the sketch below (e.g.
+`STTProvider` is a streaming lifecycle of
+`start_stream`/`feed_audio_chunk`/`end_stream` rather than one
+`stream_audio_chunk` method, and every provider call returns a
+`UsageReport` for cost accounting). The `TelephonyAdapter` sketch below
+remains purely illustrative — telephony audio is not yet wired into this
+service, see `README.md`'s "Deferred / follow-up work".
 
 ```python
 from typing import Protocol, AsyncIterator
+
 
 class TelephonyAdapter(Protocol):
     """One implementation per provider. Per the 2026-09-21 telephony research

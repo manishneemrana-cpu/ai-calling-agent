@@ -14,7 +14,8 @@ This is now its own repository: `github.com/manishneemrana-cpu/ai-calling-agent`
 
 - **Phase 0 (discovery/planning): done.** See the documents below.
 - **Phase 1 (foundation — auth, multi-tenancy, database schema, dashboard shell, tenant-isolation tests): done.** See [`docs/PHASE1_DECISIONS.md`](docs/PHASE1_DECISIONS.md) for the stack decisions and reasoning, and the Quickstart below to run it.
-- **Phase 2 (telephony/voice pipeline): next.** `services/voice-gateway/` is scaffolded as a placeholder — see its `README.md` and `PROVIDERS.md`.
+- **Phase 2 (telephony provider registry): done.** DB-driven Provider Registry (`providers` / `tenant_provider_config`, see [`docs/PROVIDER_REGISTRY.md`](docs/PROVIDER_REGISTRY.md)) with Plivo and FreJun Teler telephony adapters, in `apps/web/lib/providers/`.
+- **Phase 3 (real-time streaming voice pipeline): done.** `services/voice-gateway/` is now a real, standalone **Python** service — multi-provider STT (Sarvam, Deepgram, Groq Whisper)/TTS (Sarvam, Cartesia, ElevenLabs, Piper)/LLM (Gemini, Groq Llama) adapters reusing the exact same Provider Registry pattern and DB tables as Phase 2 (zero schema change — see `db/migrations/008_stt_tts_llm_providers.sql`), plus a minimal STT→LLM→TTS conversation orchestrator with barge-in and silence-handling. **This repo is now two runtimes sharing one Postgres database**: `apps/web` (Node/Next.js, dashboard + REST API) and `services/voice-gateway` (Python, the voice pipeline) — see `services/voice-gateway/README.md` for how to run the Python service standalone (separate from `npm run dev`). Real Pipecat `Pipeline`/live-telephony-audio wiring is scoped out as follow-up work — see that README's "Deferred / follow-up work".
 
 ## Quickstart
 

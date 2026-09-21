@@ -270,3 +270,63 @@ There are at least three unrelated things called "Voicebox," and none is a usabl
 11. Legal review of Piper's GPL-3.0 relicensing (post Oct 2025) and per-voice-model license terms before using it as a self-hosted TTS in a commercial SaaS.
 12. Hands-on Phase 1 spike: confirm whether Bhashini's government-tier API supports real-time streaming ASR/TTS suitable for a live barge-in call (unconfirmed in §8.5) — if yes, it's a candidate free/near-free Economy STT/TTS alternate for Indian-language tenants.
 13. Hands-on Phase 1 eval: Smallest.ai TTS quality/latency/Hinglish-handling head-to-head against Sarvam Bulbul (§8.2) — decide whether it's worth adding as a documented alternate.
+
+---
+
+## 10. Phase 3 re-verification pass — 2026-09-21 (STT/TTS/LLM build kickoff)
+
+Before implementing `services/voice-gateway`'s STT/TTS/LLM adapters, per the
+task's instruction to reconfirm current API shape/model availability
+(quick pass, not a full Phase 0 redo — most pricing/vendor findings above
+already hold from the same-day §7/§8 research). Findings that CHANGED a
+concrete decision are called out explicitly; everything else confirmed the
+existing plan.
+
+- **Gemini model naming — changed the adapter's approach, not just a
+  number.** Open items #8 above asked to "confirm Gemini's post-2026-10-16
+  successor model name/pricing." Re-checking: Google documents rolling
+  aliases `gemini-flash-latest` / `gemini-flash-lite-latest` that always
+  resolve to the current non-deprecated build of that tier (Google gives
+  ~2 weeks' notice before an alias moves to a new underlying model). Rather
+  than pin a dated successor string that would just repeat this exact
+  problem at the next retirement (2.5 Flash-Lite/Flash → the task's own
+  cited 3.1/3.5 successors were themselves *more expensive* per-token, per
+  §4.1 above, meaning even "the current best pick" churns), the
+  `llm.gemini_flash_lite` / `llm.gemini_flash` adapters
+  (`voice_gateway/llm/adapters/gemini.py`) default to these rolling aliases.
+  A tenant needing a pinned, contractually-stable model for cost
+  predictability can still override `tenant_provider_config.config.model`
+  with a dated string — this is a config default, not a hard constraint.
+- **Groq Llama — confirmed §4.2's conclusion, no change.** `llama-3.1-8b-instant`
+  remains self-serve at the OpenAI-compatible `api.groq.com/openai/v1/chat/completions`
+  endpoint; `llama-3.3-70b` remains enterprise/contact-sales only (as of the
+  2026-08-26 change already recorded in §4.2). Adapter targets 3.1-8B.
+- **Sarvam STT — model name confirmed, endpoint detail added.** §2.1/§9.7
+  already flagged the Saarika v2.5 → Saaras v3 migration; this pass found
+  the specific realtime-streaming detail needed to actually implement it:
+  the streaming endpoint is `wss://api.sarvam.ai/speech-to-text/ws`,
+  defaulting to `saaras:v3-realtime` (with `saaras:v4-realtime` also
+  available on the same endpoint/protocol). No pricing change found.
+- **Deepgram, Cartesia, ElevenLabs, Piper** — no new findings changed
+  anything from §2/§3; adapters implement the API shapes already described
+  there (Deepgram Nova-3 WebSocket, Cartesia Sonic-3 WebSocket, ElevenLabs
+  HTTP streaming, Piper as a self-hosted HTTP wrapper with the GPL-3.0
+  caveat repeated verbatim from §3.4 in
+  `services/voice-gateway/voice_gateway/tts/adapters/piper.py` and in
+  `db/migrations/008_stt_tts_llm_providers.sql`'s `providers` row for it).
+- **Groq-hosted Whisper** — confirmed as a genuinely real, self-serve
+  product (§2.3's finding holds), and confirmed it is a *batch/REST*
+  endpoint (`POST api.groq.com/openai/v1/audio/transcriptions`,
+  `whisper-large-v3-turbo`), not a live streaming socket — the
+  `stt.groq_whisper` adapter implements the STTProvider streaming interface
+  by buffering and transcribing once per utterance (see that adapter's
+  docstring), exactly the "cost-optimized fallback, not primary live-turn
+  STT" role §2.3 already assigned it. Self-hosted faster-whisper was not
+  additionally implemented as a fourth STT adapter for this phase (Sarvam/
+  Deepgram/Groq Whisper/Mock cover the task's explicit adapter list); it
+  remains a documented option per §2.3 if a future phase needs it.
+
+No other pricing figures in this document needed re-verification for this
+build — see `services/voice-gateway/README.md`'s "Model-name / pricing
+re-verification" section for how these findings map onto the actual
+adapter code and the `providers` catalog rows.
