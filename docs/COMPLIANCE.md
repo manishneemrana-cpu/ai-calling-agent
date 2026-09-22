@@ -26,6 +26,64 @@
 - Retention and access-control policy for call recordings/transcripts (who can access them, how long they're kept, whether tenants can opt out of recording) — this overlaps with India's broader data-protection regime (DPDP Act) which is out of scope for this document but must be covered in the legal review.
 - Inbound vs. outbound calling may have different compliance postures (inbound calls initiated by the customer generally carry fewer DND/consent restrictions than outbound cold/warm calling) — the product's initial use case (inbound sales inquiries vs. outbound lead follow-up) should be clarified with the founder, since it materially changes the compliance burden for Phase 1 launch.
 
+## 2026-09-22 re-verification (Phase 6 — compliance gate build)
+
+Re-searched rather than assumed still-current, per the founder's brief.
+**Confirms and sharpens** the 2026-09-21 findings above; no reversal.
+
+- **Third TCCCPR amendment, dated 2026-09-18** (four days before this
+  re-check, and one day after the initial 2026-09-21 pass here — same
+  amendment, now with more implementation detail found): TRAI formalized
+  **Regulation 21A**, requiring telecom service providers themselves to
+  run **AI/ML-based detection** of Customer Line Identifications (CLIs)
+  with a high probability of being used for unsolicited commercial
+  communication, and to share flagged CLIs across TSPs. **Graded
+  enforcement is now explicit and automatic**: 5+ flagged CLIs from one
+  sender within a 10-day window triggers KYC re-verification, physical
+  verification, barring of outgoing service, and — for repeat/severe
+  cases — disconnection of the telecom resource entirely. This raises the
+  stakes on this platform's compliance gate being airtight: a bug that
+  lets even a handful of non-compliant calls through in a short window
+  could get a tenant's number(s) auto-flagged and barred by the carrier,
+  independent of any TRAI complaint process.
+- **A2P (Application-to-Person) calling is now formally defined**: "voice
+  calls initiated by an application, software system or automated
+  platform without direct human dialing, including autodialing, robo-calls
+  and pre-recorded/artificial voice technologies." This is an explicit,
+  named regulatory category this platform's entire outbound-calling
+  product falls into — not an edge case or a gray area needing
+  interpretation. Every call this platform places is an A2P call under
+  this definition.
+- **Call-management app carve-out**: TRAI's amendment also restricts apps
+  like Truecaller from filtering/blocking calls from TRAI-designated
+  commercial number series (140/1600). This is informational for this
+  platform (it affects how a called party's phone treats the call, not
+  what this platform must do) but is a signal that correct number-series
+  registration (140 promotional vs 1600 BFSI-service, per the 1 Jan 2026
+  deadline already noted above) has carrier-level consequences beyond
+  regulatory risk.
+- **No change** to the core enforceable rules this phase's compliance
+  gate implements: DLT registration prerequisite, DND/NDNC exclusion
+  absent valid consent, 7-day explicit-consent expiry, and the spam-report
+  window. The Phase 6 `lead_compliance` schema and
+  `assertCallIsCompliant()` gate (`apps/web/lib/compliance/gate.ts`) target
+  exactly these — consent status + expiry, DND flag, opt-out, and (via
+  `campaigns`) calling-hour windows and per-campaign rate limits — as the
+  enforceable minimum a technical gate can check. **DLT registration
+  itself, and per-tenant telemarketer/header registration, remain a
+  business/legal onboarding step outside this codebase** (as flagged since
+  Phase 0) — the gate assumes a lead's `lead_compliance` row was populated
+  correctly upstream (by a properly DLT-registered consent-capture flow),
+  it cannot itself verify DLT registration status.
+
+Sources (2026-09-22 pass): medianama.com/2026/09/223-trai-truecaller-140-1600-calls-spam-rules;
+etvbharat.com trai-tightens-regulations-on-spam-callers; business-standard.com
+ai-calls-how-to-identify-legitimate-calls-spam-scams; indiantelevision.com
+trai-tightens-anti-spam-rules-with-ai-based-enforcement.
+
+**This re-verification is still not legal advice — see the disclaimer
+below, which applies with equal force to this section.**
+
 ## Explicit disclaimer (repeated per the founder's spec)
 
-**Nothing in this document, or in any other Phase 0 document in this repository, constitutes legal advice. Before any real customer is called by this platform, a licensed Indian telecom/data-privacy lawyer must review: the DLT registration model chosen, the consent-capture and expiry logic, the numbering-series classification of the platform's call types, and the data-retention policy for recordings and transcripts.**
+**Nothing in this document, or in any other Phase 0 document in this repository, constitutes legal advice. Before any real customer is called by this platform, a licensed Indian telecom/data-privacy lawyer must review: the DLT registration model chosen, the consent-capture and expiry logic, the numbering-series classification of the platform's call types, and the data-retention policy for recordings and transcripts. This applies equally to the Phase 6 compliance gate (`apps/web/lib/compliance/gate.ts`) and its `lead_compliance`/`campaigns` schema — a qualified professional must review the actual consent-capture UX, DND-list refresh mechanism, and calling-hour/rate-limit defaults before any real tenant is allowed to dial real numbers through it.**

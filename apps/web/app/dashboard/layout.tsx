@@ -16,6 +16,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Link href="/dashboard">Dashboard</Link>
           <Link href="/dashboard/agents">Agents</Link>
           <Link href="/dashboard/leads">Leads</Link>
+          <Link href="/dashboard/appointments">Appointments</Link>
         </div>
         <form action={logoutAction}>
           <button type="submit">Log out</button>

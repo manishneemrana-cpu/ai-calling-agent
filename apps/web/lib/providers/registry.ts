@@ -3,6 +3,7 @@ import { withTenant } from "../db/tenant";
 import { decryptProviderConfig, isEncryptedConfig } from "./crypto";
 import { resolveAdapterFactory } from "./adapter-map";
 import type { TelephonyProvider } from "./telephony/types";
+import type { WhatsAppProvider } from "./whatsapp/types";
 
 // Import every built-in adapter module once, for its side-effecting
 // registerAdapter() call. This file is the ONLY place that needs to know
@@ -14,8 +15,10 @@ import type { TelephonyProvider } from "./telephony/types";
 import "./telephony/adapters/mock";
 import "./telephony/adapters/plivo";
 import "./telephony/adapters/frejun-teler";
+import "./whatsapp/adapters/mock";
+import "./whatsapp/adapters/interakt";
 
-export type Layer = "telephony" | "stt" | "tts" | "llm";
+export type Layer = "telephony" | "stt" | "tts" | "llm" | "whatsapp";
 
 export class ProviderNotConfiguredError extends Error {
   constructor(orgId: string, layer: Layer) {
@@ -55,6 +58,14 @@ export async function getTelephonyProvider(
   opts: { providerKey?: string } = {}
 ): Promise<TelephonyProvider> {
   return getProvider<TelephonyProvider>("telephony", orgId, userId, opts);
+}
+
+export async function getWhatsAppProvider(
+  orgId: string,
+  userId: string | null,
+  opts: { providerKey?: string } = {}
+): Promise<WhatsAppProvider> {
+  return getProvider<WhatsAppProvider>("whatsapp", orgId, userId, opts);
 }
 
 export async function getProvider<T>(

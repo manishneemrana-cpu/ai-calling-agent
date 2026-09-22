@@ -1,0 +1,71 @@
+{
+  "name": "No-answer lead -> follow-up automation",
+  "nodes": [
+    {
+      "id": "trigger-cron",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      }
+    },
+    {
+      "id": "call-no-answer-leads",
+      "name": "Fetch No-Answer Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_BASE_URL }}/api/webhooks/n8n/no-answer-leads?orgId={{ $env.TENANT_ORG_ID }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-n8n-webhook-token", "value": "={{ $env.N8N_WEBHOOK_SHARED_SECRET }}" }]
+        }
+      }
+    },
+    {
+      "id": "split-leads",
+      "name": "Split Out Leads",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [780, 300],
+      "parameters": { "fieldToSplitOut": "leads" }
+    },
+    {
+      "id": "call-whatsapp-nudge",
+      "name": "Send WhatsApp Nudge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/webhooks/n8n/qualified-lead-whatsapp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-webhook-token", "value": "={{ $env.N8N_WEBHOOK_SHARED_SECRET }}" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"orgId\": $env.TENANT_ORG_ID, \"leadId\": $json.lead_id, \"toNumber\": $json.phone_number, \"templateKey\": \"missed_call_follow_up\", \"variables\": { \"1\": $json.full_name } } }}"
+      }
+    }
+  ],
+  "connections": {
+    "Every Hour": { "main": [[{ "node": "Fetch No-Answer Leads", "type": "main", "index": 0 }]] },
+    "Fetch No-Answer Leads": { "main": [[{ "node": "Split Out Leads", "type": "main", "index": 0 }]] },
+    "Split Out Leads": { "main": [[{ "node": "Send WhatsApp Nudge", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "phase6-v1",
+  "meta": {
+    "description": "Runs alongside — never instead of — the built-in smart-retry call schedule (lib/campaigns/dialer.ts). Every hour, fetches leads whose latest disposition is no_answer via /api/webhooks/n8n/no-answer-leads, then sends each a templated WhatsApp nudge via the same generic follow-up endpoint used by the AI-qualified-lead workflow, reusing its templateKey generality rather than a new real-estate-specific endpoint.",
+    "requiredEnv": ["APP_BASE_URL", "N8N_WEBHOOK_SHARED_SECRET", "TENANT_ORG_ID"]
+  }
+}

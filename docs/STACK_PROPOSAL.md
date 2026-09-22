@@ -37,6 +37,25 @@ FreJun Teler's verified blended rate (≈₹0.28–0.30/min including the stream
 | Database | **PostgreSQL + pgvector** | — (spec-mandated, not a swappable adapter) | Stores tenant/call/transcript/CRM data plus vector embeddings for RAG-style knowledge lookups (property listings, FAQs) the agent can call as a tool. |
 | Cache / Queue | **Redis** | — (spec-mandated) | Session state for in-flight calls, rate limiting, pub/sub between the voice gateway and orchestrator, and a queue for outbound-call jobs. |
 
+## WhatsApp (Phase 6, added 2026-09-22)
+
+| Layer | Primary | Alternate | Reasoning |
+|---|---|---|---|
+| WhatsApp | **Interakt** (BSP) | **Gupshup** (BSP) | See `VERIFICATION.md` §10 for full research. Interakt is an official Meta Business Solution Provider with the most transparent published per-conversation pricing of the compared BSPs (~₹0.95-0.97/marketing conversation) and a fast small-business onboarding path — the right fit for a small Indian startup's first WhatsApp integration. Gupshup is the enterprise-grade fallback (proven at BFSI scale) once volume outgrows a small BSP, kept `beta` in the `providers` catalog pending a real sales quote. Direct Meta Cloud API was evaluated and **not** chosen as the Phase 6 default — it shifts webhook/template/rate-limit engineering onto the team, which a BSP's markup buys away at this stage; it remains the documented long-term option once that bandwidth exists. |
+
+Same adapter-interface principle as Telephony/STT/TTS/LLM: business logic
+depends only on `WhatsAppProvider` (`apps/web/lib/providers/whatsapp/types.ts`),
+resolved via the same DB-driven Provider Registry
+(`tenant_provider_config` with `layer='whatsapp'`) — switching a tenant
+from Interakt to Gupshup, or to a real Meta Cloud API adapter later, is a
+config row change, never a code change. Per the Phase 6 multi-industry
+pivot, the interface's methods are generalized verbs (`sendDocument`,
+`sendMedia`, `sendLocation`, `sendAppointmentConfirmation`, `sendReminder`,
+`sendFollowUp`) rather than the master spec's real-estate-flavored names
+(`sendProjectDetails`, `sendPropertyImages`, `sendBrochure`,
+`sendSiteVisitConfirmation`) — a real-estate template is one tenant
+`templateKey` configuration among others, never a method name.
+
 ## Adapter interface principle
 
 Each of Telephony, STT, TTS, and LLM must be implemented as a small internal interface, e.g.:

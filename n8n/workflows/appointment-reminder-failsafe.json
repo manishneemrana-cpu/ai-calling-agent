@@ -1,0 +1,64 @@
+{
+  "name": "Site-visit/appointment -> reminder (failsafe)",
+  "nodes": [
+    {
+      "id": "trigger-cron",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] }
+      }
+    },
+    {
+      "id": "call-due-appointments",
+      "name": "Fetch Due Appointments Missing a Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_BASE_URL }}/api/webhooks/n8n/due-appointments?orgId={{ $env.TENANT_ORG_ID }}&withinHours=24",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-n8n-webhook-token", "value": "={{ $env.N8N_WEBHOOK_SHARED_SECRET }}" }]
+        }
+      }
+    },
+    {
+      "id": "alert-if-any",
+      "name": "Alert Ops If Any Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.appointments.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [[{ "node": "Fetch Due Appointments Missing a Reminder", "type": "main", "index": 0 }]]
+    },
+    "Fetch Due Appointments Missing a Reminder": {
+      "main": [[{ "node": "Alert Ops If Any Found", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "phase6-v1",
+  "meta": {
+    "description": "The app already schedules/sends appointment reminders itself via its own job queue the moment an appointment is created (lib/appointments/reminders.ts). This workflow is a documented FAILSAFE: it polls /api/webhooks/n8n/due-appointments every 15 minutes and would feed the 'Alert Ops If Any Found' branch into an ops Slack/Email node (add your own notification node here — none is wired by default since no ops channel credentials exist in this dev environment) if the internal queue ever misses a reminder.",
+    "requiredEnv": ["APP_BASE_URL", "N8N_WEBHOOK_SHARED_SECRET", "TENANT_ORG_ID"]
+  }
+}

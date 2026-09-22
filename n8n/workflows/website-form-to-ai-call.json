@@ -1,0 +1,50 @@
+{
+  "name": "Website form -> create lead -> AI call",
+  "nodes": [
+    {
+      "id": "trigger-webform",
+      "name": "Website Form Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-form-lead",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "call-lead-intake",
+      "name": "Create Lead + AI Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/webhooks/n8n/lead-intake",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-webhook-token", "value": "={{ $env.N8N_WEBHOOK_SHARED_SECRET }}" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"orgId\": $env.TENANT_ORG_ID, \"fullName\": $json.name, \"phoneNumber\": $json.phone, \"email\": $json.email, \"fromNumber\": $env.DEFAULT_CALLER_ID, \"triggerCall\": true } }}"
+      }
+    }
+  ],
+  "connections": {
+    "Website Form Webhook": {
+      "main": [[{ "node": "Create Lead + AI Call", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "phase6-v1",
+  "meta": {
+    "description": "Receives a raw website contact-form POST (n8n's own inbound webhook), then forwards a normalized payload to this app's /api/webhooks/n8n/lead-intake, which creates the lead + 7-day web-form consent record and places the first AI call through the compliance-gated createOutboundCall() path.",
+    "requiredEnv": ["APP_BASE_URL", "N8N_WEBHOOK_SHARED_SECRET", "TENANT_ORG_ID", "DEFAULT_CALLER_ID"]
+  }
+}

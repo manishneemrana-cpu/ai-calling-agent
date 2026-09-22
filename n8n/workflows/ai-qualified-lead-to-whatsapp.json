@@ -1,0 +1,50 @@
+{
+  "name": "AI-qualified lead -> WhatsApp",
+  "nodes": [
+    {
+      "id": "trigger-qualified",
+      "name": "Lead Qualified Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-qualified",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "call-whatsapp-followup",
+      "name": "Send WhatsApp Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/webhooks/n8n/qualified-lead-whatsapp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-webhook-token", "value": "={{ $env.N8N_WEBHOOK_SHARED_SECRET }}" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"orgId\": $env.TENANT_ORG_ID, \"leadId\": $json.leadId, \"toNumber\": $json.phoneNumber, \"templateKey\": \"qualified_lead_follow_up\", \"variables\": { \"1\": $json.fullName } } }}"
+      }
+    }
+  ],
+  "connections": {
+    "Lead Qualified Webhook": {
+      "main": [[{ "node": "Send WhatsApp Follow-up", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "phase6-v1",
+  "meta": {
+    "description": "Fired when Phase 5 CRM logic marks a lead 'qualified' (this app calls this webhook itself, or an n8n CRM-polling workflow does). Calls /api/webhooks/n8n/qualified-lead-whatsapp, which sends the templated message through this app's own WhatsApp Provider Registry — n8n never talks to WhatsApp directly, staying control-plane only.",
+    "requiredEnv": ["APP_BASE_URL", "N8N_WEBHOOK_SHARED_SECRET", "TENANT_ORG_ID"]
+  }
+}

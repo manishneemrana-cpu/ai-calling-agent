@@ -1,0 +1,72 @@
+{
+  "name": "CRM lead -> AI call",
+  "nodes": [
+    {
+      "id": "trigger-crm-event",
+      "name": "CRM Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crm-lead-event",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "filter-stage",
+      "name": "Only 'ready_to_call' stage",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.pipelineStage }}",
+              "rightValue": "ready_to_call",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "call-crm-lead-call",
+      "name": "Trigger AI Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APP_BASE_URL }}/api/webhooks/n8n/crm-lead-call",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-webhook-token", "value": "={{ $env.N8N_WEBHOOK_SHARED_SECRET }}" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"orgId\": $env.TENANT_ORG_ID, \"leadId\": $json.leadId, \"toNumber\": $json.phoneNumber, \"fromNumber\": $env.DEFAULT_CALLER_ID, \"agentId\": $json.agentId } }}"
+      }
+    }
+  ],
+  "connections": {
+    "CRM Event Webhook": {
+      "main": [[{ "node": "Only 'ready_to_call' stage", "type": "main", "index": 0 }]]
+    },
+    "Only 'ready_to_call' stage": {
+      "main": [[{ "node": "Trigger AI Call", "type": "main", "index": 0 }], []]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "phase6-v1",
+  "meta": {
+    "description": "Receives a CRM pipeline-stage-change event and, when the lead has reached 'ready_to_call', calls /api/webhooks/n8n/crm-lead-call to place an AI call for an existing lead through the same compliance-gated path as every other call.",
+    "requiredEnv": ["APP_BASE_URL", "N8N_WEBHOOK_SHARED_SECRET", "TENANT_ORG_ID", "DEFAULT_CALLER_ID"]
+  }
+}

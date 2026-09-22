@@ -330,3 +330,69 @@ No other pricing figures in this document needed re-verification for this
 build — see `services/voice-gateway/README.md`'s "Model-name / pricing
 re-verification" section for how these findings map onto the actual
 adapter code and the `providers` catalog rows.
+
+## §10 — Phase 6: WhatsApp Business API for a small Indian startup (2026-09-22)
+
+Researched via WebSearch on 2026-09-22 for the Phase 6 WhatsApp provider
+registry. Question: for a small Indian startup, official Meta Cloud API
+direct, or a Business Solution Provider (BSP)?
+
+### 10.1 Meta's own pricing (the floor every option pays)
+
+Meta moved WhatsApp Business Platform pricing from conversation-based to
+**per-message** pricing during 2025, and revised India marketing-template
+rates upward again in July 2026 (~₹0.7846 → ~₹0.8631 per marketing
+message; utility messages sent outside the free 24h customer-service
+window are far cheaper, ~₹0.115 each). **From 1 October 2026, Meta begins
+charging per-message for service/utility messages sent inside the
+previously-free 24h window too** — this is a live, moving cost surface a
+tenant's WhatsApp spend must be re-checked against periodically, not a
+one-time number. Direct Meta Cloud API access is technically available to
+anyone with a verified Meta Business Manager account, but requires the
+tenant/platform to build and operate webhooks, message-template
+management, retry/rate-limit handling, and delivery-status tracking
+in-house — real engineering cost for a small team, not just API pricing.
+
+### 10.2 BSP landscape (2026 snapshot)
+
+| BSP | Pricing model found | Notes |
+|---|---|---|
+| **Interakt** | Publishes per-conversation pricing on every tier (e.g. ~₹0.970/marketing message on its Starter tier, ~₹0.949 on Advanced); service messages free across tiers; official Meta BSP | Most transparent published pricing of the group; fast, well-documented small-business onboarding path |
+| **AiSensy** | Entry plan from ~₹999-1,500/month, lowest published entry price of the group | Strongest marketing/broadcast focus; good fit if bulk WhatsApp marketing (not just transactional/CRM-triggered sends) is a priority |
+| **WATI** | ~₹2,499/month tier found | Comparable feature set to Interakt/AiSensy; slightly higher published entry price |
+| **Gupshup** | No published tier pricing — pay-as-you-go, USD-denominated, sales-quote territory; ~₹4,000/month-equivalent cited by third-party comparisons | Enterprise-grade, owned by Tiger Global, used by large banks/fintechs — proven at scale, but overkill and less transparent for a Phase 6 startup volume |
+
+### 10.3 Onboarding for a small Indian startup
+
+A standard onboarding (Meta Business Manager verification + WABA creation
++ phone-number onboarding + first template approvals) takes roughly
+**3-10 business days** once documents are ready: a live business website
+showing the legal business name, an active Meta Business Manager with
+admin access, and a phone number able to receive an SMS/voice OTP that is
+**not** currently active on the free WhatsApp/WhatsApp Business consumer
+app. Template message approval (required for any business-initiated
+message outside a live 24h customer session) typically takes 24-48 hours
+per template.
+
+### 10.4 Verdict
+
+**Primary: Interakt** — official Meta BSP, the most transparent published
+per-conversation pricing of the group at Phase 6's likely startup volume,
+and a fast onboarding path appropriate for a small team's first WhatsApp
+integration. **Alternate: Gupshup** — the enterprise-grade fallback once
+volume/BFSI-grade reliability requirements outgrow a small BSP; kept as
+`beta` status in the `providers` catalog
+(`db/migrations/011_phase6_whatsapp_appointments_campaigns_compliance.sql`)
+pending a real sales quote. Direct Meta Cloud API is noted as the
+long-term option once the team has engineering bandwidth to own
+webhooks/templates/rate-limiting itself, but is **not** the Phase 6
+recommendation for a small team — the BSP's operational overhead
+reduction is worth its markup at this stage. See
+`docs/STACK_PROPOSAL.md`'s new WhatsApp row for how this maps to the
+`providers` catalog.
+
+Sources: developers.facebook.com/documentation/business-messaging/whatsapp/pricing;
+myoperator.com/blog/whatsapp-business-api-pricing-india-2026;
+m.aisensy.com/blog/whatsapp-api-providers; codingclave.com/guides/whatsapp-api-pricing-india-2026-comparison;
+codingclave.com/blog/gupshup-whatsapp-pricing-india-2026; wati.io/en/blog/whatsapp-api-prerequisites;
+go4whatsup.com/guides/get-whatsapp-business-api.

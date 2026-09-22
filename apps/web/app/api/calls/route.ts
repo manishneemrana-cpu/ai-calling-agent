@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
-import { getTelephonyProvider, ProviderNotConfiguredError } from "@/lib/providers/registry";
+import { createOutboundCall, ComplianceBlockedError, ProviderNotConfiguredError } from "@/lib/calls/createCall";
 
 /**
  * POST /api/calls — places an outbound call using this tenant's configured
@@ -15,6 +14,12 @@ import { getTelephonyProvider, ProviderNotConfiguredError } from "@/lib/provider
  * In tests/demo mode (no tenant_provider_config row beyond the seeded
  * 'mock' default), this always resolves to MockTelephonyProvider — no real
  * telephony credentials are required for the app to function end-to-end.
+ *
+ * Phase 6: this route is a thin wrapper over lib/calls/createCall.ts's
+ * `createOutboundCall()` — the ONE function allowed to place a call — so
+ * the mandatory pre-dial compliance gate (lib/compliance/gate.ts) runs
+ * here exactly the same way it runs for the campaign dialer. This route
+ * never talks to a telephony provider or inserts into `calls` directly.
  */
 
 const createCallSchema = z.object({
@@ -40,30 +45,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const { toNumber, fromNumber, agentId, leadId, providerKey } = parsed.data;
 
-  const appCallId = randomUUID();
-
   try {
-    const provider = await getTelephonyProvider(session.orgId, session.userId, { providerKey });
-
-    const result = await provider.createCall({
+    const { call } = await createOutboundCall({
+      orgId: session.orgId,
+      userId: session.userId,
       toNumber,
       fromNumber,
-      orgId: session.orgId,
-      appCallId,
-    });
-
-    const call = await withTenant(session.orgId, session.userId, async (client) => {
-      const { rows } = await client.query(
-        `INSERT INTO calls (id, org_id, agent_id, lead_id, direction, status, from_number, to_number, provider_call_id)
-         VALUES ($1, $2, $3, $4, 'outbound', $5, $6, $7, $8)
-         RETURNING id, status, provider_call_id`,
-        [appCallId, session.orgId, agentId ?? null, leadId ?? null, result.status, fromNumber, toNumber, result.providerCallId]
-      );
-      return rows[0];
+      agentId,
+      leadId,
+      providerKey,
     });
 
     return NextResponse.json({ call }, { status: 201 });
   } catch (err) {
+    if (err instanceof ComplianceBlockedError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     if (err instanceof ProviderNotConfiguredError) {
       return NextResponse.json({ error: err.message }, { status: 422 });
     }

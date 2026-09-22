@@ -1,0 +1,54 @@
+{
+  "name": "Daily summary to owner",
+  "nodes": [
+    {
+      "id": "trigger-cron",
+      "name": "Every Day at 8 PM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "30 14 * * *" }] }
+      }
+    },
+    {
+      "id": "call-daily-summary",
+      "name": "Fetch Daily Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.APP_BASE_URL }}/api/webhooks/n8n/daily-summary?orgId={{ $env.TENANT_ORG_ID }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-n8n-webhook-token", "value": "={{ $env.N8N_WEBHOOK_SHARED_SECRET }}" }]
+        }
+      }
+    },
+    {
+      "id": "email-owner",
+      "name": "Email Owner",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [800, 300],
+      "parameters": {
+        "fromEmail": "={{ $env.SUMMARY_FROM_EMAIL }}",
+        "toEmail": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=Daily summary — {{ $json.summary.date }}",
+        "text": "=Calls today: {{ $json.summary.callsToday }} ({{ $json.summary.callsCompleted }} completed)\nNew leads: {{ $json.summary.newLeadsToday }}\nAppointments today: {{ $json.summary.appointmentsToday }}\nWhatsApp messages sent: {{ $json.summary.whatsappMessagesToday }}"
+      }
+    }
+  ],
+  "connections": {
+    "Every Day at 8 PM IST": { "main": [[{ "node": "Fetch Daily Summary", "type": "main", "index": 0 }]] },
+    "Fetch Daily Summary": { "main": [[{ "node": "Email Owner", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "phase6-v1",
+  "meta": {
+    "description": "Every day at 20:00 IST (14:30 UTC), fetches the day's counts from /api/webhooks/n8n/daily-summary and emails the founder/owner via n8n's own Email node — this app never sends email itself, and n8n never touches call audio or WhatsApp credentials for this flow, only a small JSON report.",
+    "requiredEnv": ["APP_BASE_URL", "N8N_WEBHOOK_SHARED_SECRET", "TENANT_ORG_ID", "SUMMARY_FROM_EMAIL", "OWNER_EMAIL"]
+  }
+}
