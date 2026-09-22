@@ -16,10 +16,24 @@ import {
  * HONEST CAVEAT, shown directly in the UI: "Hinglish quality" is a
  * manually/admin-entered rating (`provider_quality_ratings`), never an
  * automatic score — this page never fabricates one.
+ *
+ * Phase 8 hardening: this page aggregates REAL cost across every tenant, so
+ * it is now platform-owner-only (session.orgRole === "platform") — a
+ * reseller must never see platform-level cost, per that phase's hard rule.
+ * Phase 7 originally gated this only on "any logged-in user", which this
+ * fixes.
  */
 export default async function ProviderScoreboardPage() {
   const session = await getSession();
   if (!session) return null;
+  if (session.orgRole !== "platform") {
+    return (
+      <div className="card">
+        <h1>Provider Scoreboard</h1>
+        <p className="error">Platform-owner only.</p>
+      </div>
+    );
+  }
 
   const { costStats, latencyStats, qualityRatings } = await withoutTenant(async (client) => ({
     costStats: await loadProviderCostStats(client),

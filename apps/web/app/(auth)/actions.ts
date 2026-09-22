@@ -35,7 +35,11 @@ export async function signupAction(
       password,
       fullName,
     });
-    await createSessionCookie({ userId, orgId, role: "owner" });
+    // New orgs are always created as org_role 'customer' by default (see
+    // db/migrations/013_phase8_reseller_hierarchy.sql) — every later request
+    // re-derives orgRole fresh from the DB via getSession()/resolve_session;
+    // this literal is only used for this one redirect below.
+    await createSessionCookie({ userId, orgId, role: "owner", orgRole: "customer" });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Signup failed";
     if (message.includes("duplicate key") || message.includes("users_email_unique")) {

@@ -29,6 +29,19 @@ export async function withTenant<T>(
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.current_org_id', $1, true)", [orgId]);
     await client.query("SELECT set_config('app.current_user_id', $1, true)", [userId ?? ""]);
+    // Phase 8: app.current_org_role gates platform-only data (e.g.
+    // provider_rate_cards — see db/migrations/013_phase8_reseller_hierarchy.sql).
+    // Re-derived from the organizations row itself on every transaction
+    // (never trusted from a caller-supplied argument or a cached session
+    // field) so it can never drift from what the org's role actually is in
+    // the DB. Reads its OWN org's row, which RLS already allows once
+    // app.current_org_id is set (organizations_isolation: id = current_org_id()).
+    const { rows } = await client.query(
+      "SELECT org_role FROM organizations WHERE id = current_org_id()"
+    );
+    await client.query("SELECT set_config('app.current_org_role', $1, true)", [
+      rows[0]?.org_role ?? "",
+    ]);
     const result = await fn(client);
     await client.query("COMMIT");
     return result;

@@ -49,4 +49,15 @@ async def with_tenant(
     async with pool.acquire() as conn, conn.transaction():
         await conn.execute("SELECT set_config('app.current_org_id', $1, true)", org_id)
         await conn.execute("SELECT set_config('app.current_user_id', $1, true)", user_id or "")
+        # Phase 8 (apps/web/lib/db/tenant.ts's withTenant, mirrored here):
+        # app.current_org_role gates platform-only data (e.g.
+        # provider_rate_cards — see
+        # db/migrations/013_phase8_reseller_hierarchy.sql). Re-derived from
+        # the organizations row itself every transaction, never trusted from
+        # a caller-supplied argument, so it can never drift from the org's
+        # actual role in the DB.
+        org_role = await conn.fetchval(
+            "SELECT org_role FROM organizations WHERE id = current_org_id()"
+        )
+        await conn.execute("SELECT set_config('app.current_org_role', $1, true)", org_role or "")
         return await fn(conn)

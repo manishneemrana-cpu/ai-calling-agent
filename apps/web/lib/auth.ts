@@ -6,10 +6,19 @@ import { withoutTenant } from "./db/tenant";
 export const SESSION_COOKIE = "session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
+export type OrgRole = "platform" | "reseller" | "customer";
+
 export type SessionInfo = {
   userId: string;
   orgId: string;
   role: "owner" | "admin" | "agent_manager" | "viewer";
+  /** Phase 8: the org's place in the Platform Owner -> Reseller -> Customer
+   * hierarchy (organizations.org_role). Defaults to "customer" for the
+   * signup path below, where the org was just created (always org_role
+   * 'customer' per db/migrations/013_phase8_reseller_hierarchy.sql's
+   * default) — every subsequent request re-derives it fresh from the DB
+   * via resolve_session(), never trusting a stale cached value. */
+  orgRole: OrgRole;
 };
 
 function hashToken(token: string): string {
@@ -52,7 +61,7 @@ export async function login(email: string, password: string): Promise<SessionInf
     const row = rows[0];
     const ok = await verifyPassword(password, row.password_hash);
     if (!ok) return null;
-    return { userId: row.user_id, orgId: row.org_id, role: row.role };
+    return { userId: row.user_id, orgId: row.org_id, role: row.role, orgRole: row.org_role as OrgRole };
   });
 }
 
@@ -89,7 +98,12 @@ export async function getSession(): Promise<SessionInfo | null> {
   return withoutTenant(async (client) => {
     const { rows } = await client.query("SELECT * FROM resolve_session($1)", [tokenHash]);
     if (rows.length === 0) return null;
-    return { userId: rows[0].user_id, orgId: rows[0].org_id, role: rows[0].role } as SessionInfo;
+    return {
+      userId: rows[0].user_id,
+      orgId: rows[0].org_id,
+      role: rows[0].role,
+      orgRole: rows[0].org_role as OrgRole,
+    } as SessionInfo;
   });
 }
 

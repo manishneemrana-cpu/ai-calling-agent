@@ -88,13 +88,17 @@ def compute_cost_usd(quantity: float, usage_unit: str, rate_unit: str, unit_pric
 async def _load_latest_rate_card(
     conn: asyncpg.Connection, provider_type: str, provider_key: str
 ) -> asyncpg.Record | None:
+    # Phase 8: provider_rate_cards is now RLS-gated to the platform owner
+    # (db/migrations/013_phase8_reseller_hierarchy.sql), since a reseller/
+    # customer must never browse the platform's raw vendor rate-card
+    # catalog. But THIS call is the real billing pipeline computing a
+    # tenant's own cost_records row for their own usage — not browsing —
+    # so it goes through internal_lookup_rate_card(), a SECURITY DEFINER
+    # function that returns only the one (provider_type, provider_key) row
+    # asked for, never a way to list the catalog. See that function's own
+    # comment in the migration for the full reasoning.
     return await conn.fetchrow(
-        """
-        SELECT unit, unit_price_usd FROM provider_rate_cards
-         WHERE provider_type = $1 AND provider_key = $2 AND effective_from <= current_date
-         ORDER BY effective_from DESC
-         LIMIT 1
-        """,
+        "SELECT unit, unit_price_usd FROM internal_lookup_rate_card($1, $2)",
         provider_type,
         provider_key,
     )

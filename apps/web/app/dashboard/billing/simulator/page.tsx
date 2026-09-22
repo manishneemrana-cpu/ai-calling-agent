@@ -38,6 +38,22 @@ export default async function CostSimulatorPage({
 }) {
   const session = await getSession();
   if (!session) return null;
+  if (session.orgRole !== "platform") {
+    // Phase 8: provider_rate_cards is now RLS-gated to the platform owner
+    // (db/migrations/013_phase8_reseller_hierarchy.sql) — a reseller or
+    // customer org's connection gets zero rows here by design. Resellers
+    // get their own cost-simulator EXPORT instead, built off their own
+    // buy/sell rates — see /dashboard/reseller/starter-kit.
+    return (
+      <div className="card">
+        <h1>Cost Simulator</h1>
+        <p className="error">
+          Platform-owner only — this simulator runs against real vendor <code>provider_rate_cards</code>.
+          Resellers: see /dashboard/reseller/starter-kit for your own cost-simulator export.
+        </p>
+      </div>
+    );
+  }
   const sp = await searchParams;
 
   const providerKeys = {
