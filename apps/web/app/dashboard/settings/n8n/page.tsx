@@ -1,6 +1,8 @@
 import { getSession } from "@/lib/auth";
 import { hasN8nWebhookToken } from "@/lib/webhooks/n8nToken";
 import { rotateTokenAction, readAndClearNewToken } from "./actions";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
 
 /**
  * /dashboard/settings/n8n — where a tenant generates/rotates their
@@ -20,29 +22,33 @@ export default async function N8nSettingsPage() {
   ]);
 
   return (
-    <div className="card">
-      <h1>n8n Integration</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Set this as your n8n instance&apos;s <code>N8N_WEBHOOK_SHARED_SECRET</code> environment variable — it is
-        sent as the <code>x-n8n-webhook-token</code> header on every request to this app&apos;s{" "}
-        <code>/api/webhooks/n8n/*</code> endpoints (see docs/N8N_WORKFLOWS.md). This token is specific to YOUR
-        org — it cannot be used to address any other tenant&apos;s data, and a body/query <code>orgId</code> in a
-        request is never trusted for tenant selection, only this token is.
-      </p>
+    <div>
+      <PageHeader
+        title="n8n Integration"
+        description="Set this as your n8n instance's N8N_WEBHOOK_SHARED_SECRET — sent as the x-n8n-webhook-token header on every request to this app's webhook endpoints. Specific to your org only."
+      />
 
-      {newToken && (
-        <p className="error" style={{ marginBottom: "1rem" }}>
-          <strong>New token (shown once — copy it now, it cannot be shown again):</strong>
-          <br />
-          <code>{newToken}</code>
+      <div className="card">
+        {newToken && (
+          <div className="alert alert-danger">
+            <div>
+              <strong>New token (shown once — copy it now, it cannot be shown again):</strong>
+              <br />
+              <code>{newToken}</code>
+            </div>
+          </div>
+        )}
+
+        <p>
+          Status: <Badge tone={hasToken ? "success" : "neutral"}>{hasToken ? "Configured" : "Not configured"}</Badge>
         </p>
-      )}
 
-      <p>Status: {hasToken ? "A token is configured." : "No token configured yet."}</p>
-
-      <form action={rotateTokenAction}>
-        <button type="submit">{hasToken ? "Rotate token (invalidates the old one immediately)" : "Generate token"}</button>
-      </form>
+        <form action={rotateTokenAction}>
+          <button type="submit" className="btn-secondary">
+            {hasToken ? "Rotate token (invalidates the old one immediately)" : "Generate token"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

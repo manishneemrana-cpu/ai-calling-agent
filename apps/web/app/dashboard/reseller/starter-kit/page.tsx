@@ -1,6 +1,8 @@
 import { getSession } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
 import { createStarterKitShareAction } from "../actions";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 /**
  * /dashboard/reseller/starter-kit — the Reseller Starter Kit's in-app home
@@ -15,9 +17,11 @@ export default async function ResellerStarterKitPage() {
   if (!session) return null;
   if (session.orgRole !== "reseller") {
     return (
-      <div className="card">
-        <h1>Reseller Starter Kit</h1>
-        <p className="error">This page is only available to reseller accounts.</p>
+      <div>
+        <PageHeader title="Reseller Starter Kit" />
+        <div className="card">
+          <p className="error">This page is only available to reseller accounts.</p>
+        </div>
       </div>
     );
   }
@@ -32,74 +36,83 @@ export default async function ResellerStarterKitPage() {
   });
 
   return (
-    <div className="card">
-      <h1>Reseller Starter Kit</h1>
-      <ul style={{ marginBottom: "1.5rem" }}>
-        <li>
-          Sales script (demo-mode walkthrough): <code>docs/RESELLER_STARTER_KIT/SALES_SCRIPT.md</code>
-        </li>
-        <li>
-          Proposal template: <code>docs/RESELLER_STARTER_KIT/PROPOSAL_TEMPLATE.md</code>
-        </li>
-        <li>
-          Cost-simulator export: create a shareable link below, or download it as CSV.
-        </li>
-      </ul>
+    <div>
+      <PageHeader title="Reseller Starter Kit" />
 
-      <h2>Create a cost-simulator share for a prospect</h2>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Computed only from YOUR buy/sell rates — never the platform&apos;s underlying vendor rate cards. The
-        link works without the prospect logging in.
-      </p>
-      <form action={createStarterKitShareAction}>
-        <label>
-          Prospect name
-          <input type="text" name="prospectName" />
-        </label>
-        <label>
-          Plan label
-          <input type="text" name="planLabel" placeholder="e.g. Starter — 2,000 min/mo" />
-        </label>
-        <label>
-          Estimated minutes/month
-          <input type="number" name="estimatedMinutesPerMonth" min="1" step="1" required />
-        </label>
-        <button type="submit">Create share link</button>
-      </form>
+      <div className="card">
+        <ul style={{ marginBottom: 0 }}>
+          <li>
+            Sales script (demo-mode walkthrough): <code>docs/RESELLER_STARTER_KIT/SALES_SCRIPT.md</code>
+          </li>
+          <li>
+            Proposal template: <code>docs/RESELLER_STARTER_KIT/PROPOSAL_TEMPLATE.md</code>
+          </li>
+          <li>Cost-simulator export: create a shareable link below, or download it as CSV.</li>
+        </ul>
+      </div>
 
-      <h2 style={{ marginTop: "2rem" }}>Existing shares</h2>
-      {shares.length === 0 ? (
-        <p className="empty-state">No shares created yet.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Prospect</th>
-              <th>Plan</th>
-              <th>Est. minutes/mo</th>
-              <th>Link</th>
-              <th>CSV</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shares.map((s) => (
-              <tr key={s.id}>
-                <td>{s.prospect_name ?? "—"}</td>
-                <td>{s.plan_label ?? "—"}</td>
-                <td>{Number(s.estimated_minutes_per_month).toLocaleString()}</td>
-                <td>
-                  <a href={`/starter-kit/${s.share_token}`}>/starter-kit/{s.share_token}</a>
-                </td>
-                <td>
-                  <a href={`/api/reseller/starter-kit/export?token=${s.share_token}`}>Download CSV</a>
-                </td>
-                <td>{new Date(s.created_at).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <div className="card">
+        <h2>Create a cost-simulator share for a prospect</h2>
+        <p className="text-muted">
+          Computed only from YOUR buy/sell rates — never the platform&apos;s underlying vendor rate cards. The
+          link works without the prospect logging in.
+        </p>
+        <form action={createStarterKitShareAction}>
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="prospectName">Prospect name</label>
+              <input id="prospectName" type="text" name="prospectName" />
+            </div>
+            <div className="field">
+              <label htmlFor="planLabel">Plan label</label>
+              <input id="planLabel" type="text" name="planLabel" placeholder="e.g. Starter — 2,000 min/mo" />
+            </div>
+            <div className="field">
+              <label htmlFor="estimatedMinutesPerMonth">Estimated minutes/month</label>
+              <input id="estimatedMinutesPerMonth" type="number" name="estimatedMinutesPerMonth" min="1" step="1" required />
+            </div>
+          </div>
+          <button type="submit" className="btn-primary">Create share link</button>
+        </form>
+      </div>
+
+      <div className="card">
+        <h2>Existing shares</h2>
+        {shares.length === 0 ? (
+          <EmptyState title="No shares created yet" description="Create a share above to send a prospect a live cost-simulator link." />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Prospect</th>
+                  <th>Plan</th>
+                  <th>Est. minutes/mo</th>
+                  <th>Link</th>
+                  <th>CSV</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shares.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.prospect_name ?? "—"}</td>
+                    <td>{s.plan_label ?? "—"}</td>
+                    <td>{Number(s.estimated_minutes_per_month).toLocaleString()}</td>
+                    <td>
+                      <a href={`/starter-kit/${s.share_token}`}>/starter-kit/{s.share_token}</a>
+                    </td>
+                    <td>
+                      <a href={`/api/reseller/starter-kit/export?token=${s.share_token}`}>Download CSV</a>
+                    </td>
+                    <td>{new Date(s.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

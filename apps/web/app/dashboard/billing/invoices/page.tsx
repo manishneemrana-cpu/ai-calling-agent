@@ -1,5 +1,8 @@
 import { getSession } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Badge, toneForStatus } from "@/components/ui/Badge";
 
 /**
  * /dashboard/billing/invoices — plumbing-proof invoice list (plain HTML
@@ -24,44 +27,49 @@ export default async function InvoicesPage() {
   });
 
   return (
-    <div className="card">
-      <h1>Invoices</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Structured invoice records generated from this org&apos;s cost/usage aggregates (see
-        lib/billing/invoices.ts). PDF rendering is deferred to a later phase — this table is the Phase 7 bar.
-      </p>
-      {invoices.length === 0 ? (
-        <p className="empty-state">No invoices yet.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Invoice #</th>
-              <th>Issuing entity</th>
-              <th>Period</th>
-              <th>Subtotal</th>
-              <th>GST</th>
-              <th>Total</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((inv) => (
-              <tr key={inv.id}>
-                <td>{inv.invoice_number}</td>
-                <td>{inv.issuing_entity_name}</td>
-                <td>
-                  {new Date(inv.period_start).toLocaleDateString()} – {new Date(inv.period_end).toLocaleDateString()}
-                </td>
-                <td>{Number(inv.subtotal).toFixed(2)}</td>
-                <td>{Number(inv.gst_amount).toFixed(2)}</td>
-                <td>{Number(inv.total_amount).toFixed(2)}</td>
-                <td>{inv.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+    <div>
+      <PageHeader
+        title="Invoices"
+        description="Structured invoice records generated from this org's cost/usage aggregates. PDF rendering is deferred to a later phase."
+      />
+      <div className="card">
+        {invoices.length === 0 ? (
+          <EmptyState title="No invoices yet" description="Invoices generated at the end of each billing period will appear here." />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Invoice #</th>
+                  <th>Issuing entity</th>
+                  <th>Period</th>
+                  <th>Subtotal</th>
+                  <th>GST</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => (
+                  <tr key={inv.id}>
+                    <td>{inv.invoice_number}</td>
+                    <td>{inv.issuing_entity_name}</td>
+                    <td>
+                      {new Date(inv.period_start).toLocaleDateString()} – {new Date(inv.period_end).toLocaleDateString()}
+                    </td>
+                    <td>{Number(inv.subtotal).toFixed(2)}</td>
+                    <td>{Number(inv.gst_amount).toFixed(2)}</td>
+                    <td>{Number(inv.total_amount).toFixed(2)}</td>
+                    <td>
+                      <Badge tone={toneForStatus(inv.status)}>{inv.status}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 /**
  * /dashboard/admin/resellers — platform-owner-only, full visibility across
@@ -17,9 +19,11 @@ export default async function AdminResellersPage() {
 
   if (session.orgRole !== "platform") {
     return (
-      <div className="card">
-        <h1>Resellers</h1>
-        <p className="error">Platform-owner only.</p>
+      <div>
+        <PageHeader title="Resellers" />
+        <div className="card">
+          <p className="error">Platform-owner only.</p>
+        </div>
       </div>
     );
   }
@@ -34,41 +38,44 @@ export default async function AdminResellersPage() {
   });
 
   return (
-    <div className="card">
-      <h1>Resellers</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Platform-owner view of every reseller: customer count, their configured buy/sell rates, and their real
-        aggregated platform cost across their own usage plus every customer resold through them.
-      </p>
-      {error && <p className="error">{error}</p>}
-      {rows.length === 0 ? (
-        <p className="empty-state">No resellers yet — promote an org via promote_org_role().</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Reseller</th>
-              <th>Company name</th>
-              <th>Customers</th>
-              <th>Buy rate (USD/min)</th>
-              <th>Sell rate (USD/min)</th>
-              <th>Real platform cost (USD)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.reseller_org_id}>
-                <td>{r.reseller_name}</td>
-                <td>{r.company_name ?? "—"}</td>
-                <td>{r.customer_count}</td>
-                <td>{r.buy_price_per_minute_usd !== null ? `$${Number(r.buy_price_per_minute_usd).toFixed(6)}` : "not set"}</td>
-                <td>{r.sell_price_per_minute_usd !== null ? `$${Number(r.sell_price_per_minute_usd).toFixed(6)}` : "not set"}</td>
-                <td>${Number(r.real_platform_cost_usd).toFixed(4)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+    <div>
+      <PageHeader
+        title="Resellers"
+        description="Every reseller: customer count, configured buy/sell rates, and real aggregated platform cost."
+      />
+      <div className="card">
+        {error && <p className="error">{error}</p>}
+        {rows.length === 0 ? (
+          <EmptyState title="No resellers yet" description="Promote an org to reseller via promote_org_role() to see it here." />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reseller</th>
+                  <th>Company name</th>
+                  <th>Customers</th>
+                  <th>Buy rate (USD/min)</th>
+                  <th>Sell rate (USD/min)</th>
+                  <th>Real platform cost (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.reseller_org_id}>
+                    <td>{r.reseller_name}</td>
+                    <td>{r.company_name ?? "—"}</td>
+                    <td>{r.customer_count}</td>
+                    <td>{r.buy_price_per_minute_usd !== null ? `$${Number(r.buy_price_per_minute_usd).toFixed(6)}` : "not set"}</td>
+                    <td>{r.sell_price_per_minute_usd !== null ? `$${Number(r.sell_price_per_minute_usd).toFixed(6)}` : "not set"}</td>
+                    <td>${Number(r.real_platform_cost_usd).toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

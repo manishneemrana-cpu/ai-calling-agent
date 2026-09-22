@@ -1,5 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 /**
  * /dashboard/reseller/customers — a reseller's own customer orgs. Visible
@@ -14,9 +16,11 @@ export default async function ResellerCustomersPage() {
 
   if (session.orgRole !== "reseller") {
     return (
-      <div className="card">
-        <h1>Customers</h1>
-        <p className="error">This page is only available to reseller accounts.</p>
+      <div>
+        <PageHeader title="Customers" />
+        <div className="card">
+          <p className="error">This page is only available to reseller accounts.</p>
+        </div>
       </div>
     );
   }
@@ -31,38 +35,39 @@ export default async function ResellerCustomersPage() {
   });
 
   return (
-    <div className="card">
-      <h1>Customers</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Orgs you resell this platform to. Created via <code>create_customer_org()</code> (see
-        db/migrations/013_phase8_reseller_hierarchy.sql), which stamps each one&apos;s{" "}
-        <code>parent_reseller_id</code> to you and wires their <code>billing_accounts.reseller_id</code> so
-        they&apos;re billed through you from the moment they exist.
-      </p>
-      {customers.length === 0 ? (
-        <p className="empty-state">No customers yet.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Slug</th>
-              <th>Tier</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customers.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td>{c.slug}</td>
-                <td>{c.tier}</td>
-                <td>{new Date(c.created_at).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+    <div>
+      <PageHeader
+        title="Customers"
+        description="Orgs you resell this platform to — billed through you from the moment they're created."
+      />
+      <div className="card">
+        {customers.length === 0 ? (
+          <EmptyState title="No customers yet" description="Customer orgs you create will appear here, billed through your reseller account." />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Slug</th>
+                  <th>Tier</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.name}</td>
+                    <td>{c.slug}</td>
+                    <td>{c.tier}</td>
+                    <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

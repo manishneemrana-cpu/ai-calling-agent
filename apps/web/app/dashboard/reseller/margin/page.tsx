@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
 import { getResellerBuyRate, getResellerSellRate, computeResellerMargin } from "@/lib/reseller/pricing";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 /**
  * /dashboard/reseller/margin — a reseller's OWN margin view. Shows their own
@@ -16,9 +17,11 @@ export default async function ResellerMarginPage() {
   if (!session) return null;
   if (session.orgRole !== "reseller") {
     return (
-      <div className="card">
-        <h1>Margin</h1>
-        <p className="error">This page is only available to reseller accounts.</p>
+      <div>
+        <PageHeader title="Margin" />
+        <div className="card">
+          <p className="error">This page is only available to reseller accounts.</p>
+        </div>
       </div>
     );
   }
@@ -30,31 +33,35 @@ export default async function ResellerMarginPage() {
   });
 
   return (
-    <div className="card">
-      <h1>Margin</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Your own buy cost vs your own sell price. This is the ONLY cost figure a reseller can see on this
-        platform — the platform&apos;s underlying vendor rate cards are never exposed here or anywhere else a
-        reseller can query.
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Your buy cost (USD/min)</th>
-            <th>Your sell price (USD/min)</th>
-            <th>Your margin (USD/min)</th>
-            <th>Margin %</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>{margin.buyPricePerMinuteUsd !== null ? `$${margin.buyPricePerMinuteUsd.toFixed(6)}` : "not set"}</td>
-            <td>{margin.sellPricePerMinuteUsd !== null ? `$${margin.sellPricePerMinuteUsd.toFixed(6)}` : "not set"}</td>
-            <td>{margin.marginPerMinuteUsd !== null ? `$${margin.marginPerMinuteUsd.toFixed(6)}` : "—"}</td>
-            <td>{margin.marginPercent !== null ? `${margin.marginPercent.toFixed(1)}%` : "—"}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div>
+      <PageHeader
+        title="Margin"
+        description="Your own buy cost vs your own sell price — the platform's underlying vendor rate cards are never exposed to a reseller."
+      />
+      <div className="stat-grid">
+        <div className="stat-card">
+          <div className="stat-label">Your buy cost</div>
+          <div className="stat-value" style={{ fontSize: 18 }}>
+            {margin.buyPricePerMinuteUsd !== null ? `$${margin.buyPricePerMinuteUsd.toFixed(6)}/min` : "not set"}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Your sell price</div>
+          <div className="stat-value" style={{ fontSize: 18 }}>
+            {margin.sellPricePerMinuteUsd !== null ? `$${margin.sellPricePerMinuteUsd.toFixed(6)}/min` : "not set"}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Your margin</div>
+          <div className="stat-value" style={{ fontSize: 18 }}>
+            {margin.marginPerMinuteUsd !== null ? `$${margin.marginPerMinuteUsd.toFixed(6)}/min` : "—"}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Margin %</div>
+          <div className="stat-value">{margin.marginPercent !== null ? `${margin.marginPercent.toFixed(1)}%` : "—"}</div>
+        </div>
+      </div>
     </div>
   );
 }

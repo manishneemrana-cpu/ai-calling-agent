@@ -7,6 +7,8 @@ import {
   loadProviderLatencyStats,
   loadProviderQualityRatings,
 } from "@/lib/billing/scoreboard";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 /**
  * /dashboard/admin/provider-scoreboard — plumbing-proof Provider
@@ -29,9 +31,11 @@ export default async function ProviderScoreboardPage() {
   if (!session) return null;
   if (session.orgRole !== "platform") {
     return (
-      <div className="card">
-        <h1>Provider Scoreboard</h1>
-        <p className="error">Platform-owner only.</p>
+      <div>
+        <PageHeader title="Provider Scoreboard" />
+        <div className="card">
+          <p className="error">Platform-owner only.</p>
+        </div>
       </div>
     );
   }
@@ -46,78 +50,81 @@ export default async function ProviderScoreboardPage() {
   const rows = buildScoreboard(costStats, latencyStats, qualityRatings);
 
   return (
-    <div className="card">
-      <h1>Provider Scoreboard</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Aggregates REAL data already collected: Phase 3.5/4&apos;s <code>cost_records</code> for actual
-        per-unit vendor cost, and Phase 3&apos;s per-call latency measurements (persisted via the Phase 7{" "}
-        <code>call_latency_metrics</code> sink) for average latency. <strong>&ldquo;Hinglish quality&rdquo; is
-        a manually/admin-entered rating (<code>provider_quality_ratings</code>), not an automatic score</strong> —
-        it cannot be measured from usage data alone, so this page does not fabricate one. The composite score
-        formula and its weights are documented in lib/billing/scoreboard.ts (DEFAULT_SCOREBOARD_WEIGHTS) and
-        are configurable, not hardcoded business logic.
-      </p>
-      {rows.length === 0 ? (
-        <p className="empty-state">No cost_records yet — place a few calls to see real per-provider stats here.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Layer</th>
-              <th>Provider</th>
-              <th>Avg cost/unit (USD)</th>
-              <th>Avg latency (s)</th>
-              <th>Manual quality (0-10)</th>
-              <th>Composite score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={`${r.layer}:${r.providerKey}`}>
-                <td>{r.layer}</td>
-                <td>{r.providerKey}</td>
-                <td>{r.avgCostPerUnit !== null ? r.avgCostPerUnit.toFixed(6) : "—"}</td>
-                <td>{r.avgLatencyS !== null ? r.avgLatencyS.toFixed(3) : "no data yet"}</td>
-                <td>{r.manualQualityScore !== null ? r.manualQualityScore.toFixed(1) : "not rated"}</td>
-                <td>{r.compositeScore !== null ? r.compositeScore.toFixed(3) : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+    <div>
+      <PageHeader
+        title="Provider Scoreboard"
+        description={
+          <>
+            Real cost and latency data per provider. &ldquo;Hinglish quality&rdquo; is a manually-entered rating,
+            never an automatic score.
+          </>
+        }
+      />
+      <div className="card">
+        {rows.length === 0 ? (
+          <EmptyState title="No cost data yet" description="Place a few calls to see real per-provider stats here." />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Layer</th>
+                  <th>Provider</th>
+                  <th>Avg cost/unit (USD)</th>
+                  <th>Avg latency (s)</th>
+                  <th>Manual quality (0-10)</th>
+                  <th>Composite score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={`${r.layer}:${r.providerKey}`}>
+                    <td>{r.layer}</td>
+                    <td>{r.providerKey}</td>
+                    <td>{r.avgCostPerUnit !== null ? r.avgCostPerUnit.toFixed(6) : "—"}</td>
+                    <td>{r.avgLatencyS !== null ? r.avgLatencyS.toFixed(3) : "no data yet"}</td>
+                    <td>{r.manualQualityScore !== null ? r.manualQualityScore.toFixed(1) : "not rated"}</td>
+                    <td>{r.compositeScore !== null ? r.compositeScore.toFixed(3) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-      <h2 style={{ marginTop: "2rem" }}>Failover frequency</h2>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Gap-closing pass: Phase 9 built <code>provider_failover_events</code> / <code>platform_failover_stats()</code>{" "}
-        but never surfaced them in this UI — wired in now, no new data collection. Counts every recorded
-        primary-to-fallback provider switch, across every tenant.
-      </p>
-      {failoverStats.length === 0 ? (
-        <p className="empty-state">No failover events recorded yet.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Layer</th>
-              <th>From provider</th>
-              <th>To provider</th>
-              <th>Event count</th>
-              <th>Last event</th>
-            </tr>
-          </thead>
-          <tbody>
-            {failoverStats.map((f) => (
-              <tr key={`${f.layer}:${f.fromProvider}:${f.toProvider}`}>
-                <td>{f.layer}</td>
-                <td>{f.fromProvider}</td>
-                <td>{f.toProvider}</td>
-                <td>{f.eventCount}</td>
-                <td>{new Date(f.lastEventAt).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <div className="card">
+        <h2>Failover frequency</h2>
+        <p className="text-muted">Counts every recorded primary-to-fallback provider switch, across every tenant.</p>
+        {failoverStats.length === 0 ? (
+          <EmptyState title="No failover events recorded yet" />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Layer</th>
+                  <th>From provider</th>
+                  <th>To provider</th>
+                  <th>Event count</th>
+                  <th>Last event</th>
+                </tr>
+              </thead>
+              <tbody>
+                {failoverStats.map((f) => (
+                  <tr key={`${f.layer}:${f.fromProvider}:${f.toProvider}`}>
+                    <td>{f.layer}</td>
+                    <td>{f.fromProvider}</td>
+                    <td>{f.toProvider}</td>
+                    <td>{f.eventCount}</td>
+                    <td>{new Date(f.lastEventAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

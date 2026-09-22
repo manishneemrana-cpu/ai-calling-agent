@@ -6,6 +6,7 @@ import {
   loadRateCards,
   type SimulatorAssumptions,
 } from "@/lib/billing/costSimulator";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 /**
  * /dashboard/billing/simulator — plumbing-proof Cost Simulator page.
@@ -45,12 +46,14 @@ export default async function CostSimulatorPage({
     // get their own cost-simulator EXPORT instead, built off their own
     // buy/sell rates — see /dashboard/reseller/starter-kit.
     return (
-      <div className="card">
-        <h1>Cost Simulator</h1>
-        <p className="error">
-          Platform-owner only — this simulator runs against real vendor <code>provider_rate_cards</code>.
-          Resellers: see /dashboard/reseller/starter-kit for your own cost-simulator export.
-        </p>
+      <div>
+        <PageHeader title="Cost Simulator" />
+        <div className="card">
+          <p className="error">
+            Platform-owner only — this simulator runs against real vendor <code>provider_rate_cards</code>.
+            Resellers: see /dashboard/reseller/starter-kit for your own cost-simulator export.
+          </p>
+        </div>
       </div>
     );
   }
@@ -83,56 +86,61 @@ export default async function CostSimulatorPage({
   const rows = rateCards ? computeCostSimulation(DEFAULT_TIERS_MINUTES_PER_MONTH, rateCards, assumptions) : [];
 
   return (
-    <div className="card">
-      <h1>Cost Simulator</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        Real computation over the platform&apos;s current <code>provider_rate_cards</code> (vendor cost) —
-        never hardcoded output. Adjust assumptions via query params, e.g.{" "}
-        <code>?sellingPricePerMinuteUsd=0.04&avgTurnsPerMinute=3</code>. See
-        docs/COST_MODEL_V1.md for where these default assumptions came from, and
-        apps/web/tests/billing/cost-simulator.test.ts for the hand-computed math proof.
-      </p>
+    <div>
+      <PageHeader
+        title="Cost Simulator"
+        description={
+          <>
+            Real computation over the platform&apos;s current provider_rate_cards (vendor cost) — never hardcoded
+            output. Adjust assumptions via query params, e.g. ?sellingPricePerMinuteUsd=0.04&avgTurnsPerMinute=3.
+          </>
+        }
+      />
 
-      {error && (
-        <p className="empty-state">
-          Could not load rate cards for {JSON.stringify(providerKeys)}: {error}
-        </p>
-      )}
+      <div className="card">
+        {error && (
+          <p className="error">
+            Could not load rate cards for {JSON.stringify(providerKeys)}: {error}
+          </p>
+        )}
 
-      {rateCards && (
-        <table>
-          <thead>
-            <tr>
-              <th>Minutes/month</th>
-              <th>Telephony</th>
-              <th>STT</th>
-              <th>TTS</th>
-              <th>LLM</th>
-              <th>Infra</th>
-              <th>Total cost</th>
-              <th>Gross revenue</th>
-              <th>Gross margin</th>
-              <th>Margin %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.minutesPerMonth}>
-                <td>{r.minutesPerMonth.toLocaleString()}</td>
-                <td>${r.telephonyCostUsd.toFixed(2)}</td>
-                <td>${r.sttCostUsd.toFixed(2)}</td>
-                <td>${r.ttsCostUsd.toFixed(2)}</td>
-                <td>${r.llmCostUsd.toFixed(2)}</td>
-                <td>${r.infraCostUsd.toFixed(2)}</td>
-                <td>${r.totalCostUsd.toFixed(2)}</td>
-                <td>${r.grossRevenueUsd.toFixed(2)}</td>
-                <td>${r.grossMarginUsd.toFixed(2)}</td>
-                <td>{r.grossMarginPercent.toFixed(1)}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+        {rateCards && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Minutes/month</th>
+                  <th>Telephony</th>
+                  <th>STT</th>
+                  <th>TTS</th>
+                  <th>LLM</th>
+                  <th>Infra</th>
+                  <th>Total cost</th>
+                  <th>Gross revenue</th>
+                  <th>Gross margin</th>
+                  <th>Margin %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.minutesPerMonth}>
+                    <td>{r.minutesPerMonth.toLocaleString()}</td>
+                    <td>${r.telephonyCostUsd.toFixed(2)}</td>
+                    <td>${r.sttCostUsd.toFixed(2)}</td>
+                    <td>${r.ttsCostUsd.toFixed(2)}</td>
+                    <td>${r.llmCostUsd.toFixed(2)}</td>
+                    <td>${r.infraCostUsd.toFixed(2)}</td>
+                    <td>${r.totalCostUsd.toFixed(2)}</td>
+                    <td>${r.grossRevenueUsd.toFixed(2)}</td>
+                    <td>${r.grossMarginUsd.toFixed(2)}</td>
+                    <td>{r.grossMarginPercent.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

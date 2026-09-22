@@ -6,50 +6,30 @@ import {
   type PlatformAnalyticsSummary,
   type ResellerAnalyticsSummary,
 } from "@/lib/analytics/platform";
+import { PageHeader } from "@/components/ui/PageHeader";
 
-function CommonRows({ summary }: { summary: PlatformAnalyticsSummary | ResellerAnalyticsSummary }) {
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="stat-card">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value" style={{ fontSize: 20 }}>{value}</div>
+    </div>
+  );
+}
+
+function CommonStats({ summary }: { summary: PlatformAnalyticsSummary | ResellerAnalyticsSummary }) {
   return (
     <>
-      <tr>
-        <td>Total tenants</td>
-        <td>{summary.totalTenants}</td>
-      </tr>
-      <tr>
-        <td>Calls today</td>
-        <td>{summary.callsToday}</td>
-      </tr>
-      <tr>
-        <td>Connected calls today</td>
-        <td>{summary.connectedCallsToday}</td>
-      </tr>
-      <tr>
-        <td>Total minutes (all time)</td>
-        <td>{summary.totalMinutesAllTime.toFixed(1)}</td>
-      </tr>
-      <tr>
-        <td>AI cost (USD)</td>
-        <td>{summary.totalAiCostUsd.toFixed(4)}</td>
-      </tr>
-      <tr>
-        <td>Revenue (billed to tenants, USD)</td>
-        <td>{summary.totalRevenue.toFixed(4)}</td>
-      </tr>
-      <tr>
-        <td>Gross margin (USD)</td>
-        <td>{summary.grossMarginUsd.toFixed(4)}</td>
-      </tr>
-      <tr>
-        <td>Hot leads</td>
-        <td>{summary.hotLeads}</td>
-      </tr>
-      <tr>
-        <td>Appointments scheduled</td>
-        <td>{summary.appointmentsScheduled}</td>
-      </tr>
-      <tr>
-        <td>Failed calls today</td>
-        <td>{summary.failedCallsToday}</td>
-      </tr>
+      <Stat label="Total tenants" value={summary.totalTenants} />
+      <Stat label="Calls today" value={summary.callsToday} />
+      <Stat label="Connected calls today" value={summary.connectedCallsToday} />
+      <Stat label="Total minutes (all time)" value={summary.totalMinutesAllTime.toFixed(1)} />
+      <Stat label="AI cost (USD)" value={summary.totalAiCostUsd.toFixed(4)} />
+      <Stat label="Revenue (USD)" value={summary.totalRevenue.toFixed(4)} />
+      <Stat label="Gross margin (USD)" value={summary.grossMarginUsd.toFixed(4)} />
+      <Stat label="Hot leads" value={summary.hotLeads} />
+      <Stat label="Appointments scheduled" value={summary.appointmentsScheduled} />
+      <Stat label="Failed calls today" value={summary.failedCallsToday} />
     </>
   );
 }
@@ -68,9 +48,14 @@ export default async function AdminAnalyticsPage() {
 
   if (session.orgRole === "customer") {
     return (
-      <div className="card">
-        <h1>Analytics</h1>
-        <p className="error">This dashboard is for the platform owner or a reseller. See /dashboard/analytics for your own org&apos;s analytics.</p>
+      <div>
+        <PageHeader title="Analytics" />
+        <div className="card">
+          <p className="error">
+            This dashboard is for the platform owner or a reseller. See /dashboard/analytics for your own org&apos;s
+            analytics.
+          </p>
+        </div>
       </div>
     );
   }
@@ -78,52 +63,37 @@ export default async function AdminAnalyticsPage() {
   const isPlatform = session.orgRole === "platform";
 
   return (
-    <div className="card">
-      <h1>{isPlatform ? "Platform Analytics" : "My Resold Tenants — Analytics"}</h1>
-      <p className="empty-state" style={{ marginBottom: "1rem" }}>
-        {isPlatform
-          ? "Aggregated across every tenant on the platform."
-          : "Aggregated across your own org and the customer orgs you resell to — never platform-wide cost (Phase 8 visibility rule)."}
-      </p>
-      {isPlatform ? (
-        <PlatformTable />
-      ) : (
-        <ResellerTable orgId={session.orgId} />
-      )}
+    <div>
+      <PageHeader
+        title={isPlatform ? "Platform Analytics" : "My Resold Tenants — Analytics"}
+        description={
+          isPlatform
+            ? "Aggregated across every tenant on the platform."
+            : "Aggregated across your own org and the customer orgs you resell to — never platform-wide cost."
+        }
+      />
+      {isPlatform ? <PlatformStats /> : <ResellerStats orgId={session.orgId} />}
     </div>
   );
 }
 
-async function PlatformTable() {
+async function PlatformStats() {
   const summary = await withoutTenant((client) => loadPlatformAnalyticsSummary(client));
   return (
-    <table>
-      <tbody>
-        <CommonRows summary={summary} />
-        <tr>
-          <td>Active tenants (call in last 30 days)</td>
-          <td>{summary.activeTenants}</td>
-        </tr>
-        <tr>
-          <td>Active agents</td>
-          <td>{summary.activeAgents}</td>
-        </tr>
-        <tr>
-          <td>Active campaigns</td>
-          <td>{summary.activeCampaigns}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div className="stat-grid">
+      <CommonStats summary={summary} />
+      <Stat label="Active tenants (30d)" value={summary.activeTenants} />
+      <Stat label="Active agents" value={summary.activeAgents} />
+      <Stat label="Active campaigns" value={summary.activeCampaigns} />
+    </div>
   );
 }
 
-async function ResellerTable({ orgId }: { orgId: string }) {
+async function ResellerStats({ orgId }: { orgId: string }) {
   const summary = await withoutTenant((client) => loadResellerAnalyticsSummary(client, orgId));
   return (
-    <table>
-      <tbody>
-        <CommonRows summary={summary} />
-      </tbody>
-    </table>
+    <div className="stat-grid">
+      <CommonStats summary={summary} />
+    </div>
   );
 }

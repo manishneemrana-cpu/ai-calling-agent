@@ -1,5 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { getCurrentOrganization, countOrgUsers } from "@/lib/data/organizations";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge, toneForStatus } from "@/components/ui/Badge";
 
 export default async function DashboardHomePage() {
   const session = await getSession();
@@ -11,16 +13,35 @@ export default async function DashboardHomePage() {
   ]);
 
   return (
-    <div className="card">
-      <h1>Welcome</h1>
+    <div>
+      <PageHeader title="Welcome" description="A snapshot of your organization." />
       {org ? (
         <>
-          <p>
-            Organization: <strong>{org.name}</strong> ({org.slug})
-          </p>
-          <p>Tier: {org.tier}</p>
-          <p>Users in this org: {userCount}</p>
-          <p style={{ color: "var(--muted)" }}>Your role: {session.role}</p>
+          <div className="stat-grid">
+            <div className="stat-card">
+              <div className="stat-label">Organization</div>
+              <div className="stat-value" style={{ fontSize: 18 }}>
+                {org.name}
+              </div>
+              <p className="field-hint" style={{ marginTop: 4 }}>{org.slug}</p>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Tier</div>
+              <div className="stat-value" style={{ fontSize: 18 }}>
+                {org.tier}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Users in this org</div>
+              <div className="stat-value">{userCount}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Your role</div>
+              <div style={{ marginTop: 4 }}>
+                <Badge tone={toneForStatus(session.role)}>{session.role}</Badge>
+              </div>
+            </div>
+          </div>
         </>
       ) : (
         <p className="error">Could not load organization.</p>
