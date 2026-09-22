@@ -8,6 +8,48 @@ calls flow through this platform. Cross-referenced against every
 in a code-only phase — everything below is a business/infra/legal step a
 human (the founder, or someone he hires/contracts) must do.
 
+## Gap-closing pass (post-Phase-10 audit) — outcomes
+
+A dedicated audit pass across every phase's original scope, done AFTER
+this file was first written, closing the confirmed biggest gap and
+re-checking every phase's own "deferred" list for anything that should
+have been picked up by a later phase but fell through the cracks:
+
+- **FIXED — Prompt-to-Agent Builder actually implemented.** Designed since
+  Phase 0 (`docs/PROMPT_TO_AGENT_BUILDER.md`), flagged as the platform's
+  single biggest gap by this very file's Phase 10 audit, but never
+  actually built in code through Phase 10. Now real:
+  `services/voice-gateway/voice_gateway/agent_builder/` (meta-prompt +
+  parser, consuming the Phase 3 LLM registry) +
+  `apps/web/lib/agent-builder/commit.ts` (writes into `agent_prompts` and
+  reuses Phase 5's existing `instantiate*FromSuggestions` functions) +
+  `POST /api/agents/generate-from-prompt`(`/commit`) + `/dashboard/agents/new`.
+  See `docs/PROMPT_TO_AGENT_BUILDER.md` §9 for the full design/reasoning.
+- **FIXED — per-tenant n8n webhook tokens.** See `docs/N8N_WORKFLOWS.md`'s
+  "Per-tenant webhook tokens" section — moved above from Category B.
+- **FIXED — `parent_reseller_id` validity constraint.** A trigger
+  (`db/migrations/016_gap_closing_pass.sql`) now enforces that a non-null
+  `parent_reseller_id` points at an org whose OWN `org_role` is `reseller`
+  or `platform` — previously only guaranteed by `promote_org_role()`/
+  `create_customer_org()` being the sole intended callers, with no
+  schema-level backstop against a direct `UPDATE`.
+- **FIXED — Provider Scoreboard failover-frequency stats wired into the
+  UI.** `platform_failover_stats()` existed since Phase 9 with no reader;
+  `/dashboard/admin/provider-scoreboard` now shows it
+  (`lib/billing/scoreboard.ts`'s `loadProviderFailoverStats`).
+- **Re-confirmed correctly deferred (no change needed):** real Pipecat
+  `Pipeline`/VAD wiring (Category A, still genuinely needs live audio to
+  build against), the Cashfree adapter (Category D, catalog-only is still
+  fine), and invoice PDF rendering (Category D, legitimate later polish).
+- **Nothing else found.** Every other phase's own "deferred" list
+  (Phase 3.5/4's audio-bridge gaps, Phase 6's ops-notification node,
+  Phase 7's rate-card input/output-token convention, Phase 8's reseller
+  UI, Phase 9's soak-testing/pool-sizing items) was re-checked against
+  `docs/PHASE0_SUMMARY.md`'s phase list and this file's own prior
+  categories — all were already correctly cataloged below as genuine
+  infra/business work, not silently-dropped code gaps. No speculative new
+  items were added.
+
 ## Category A — must-have before this platform can place ONE real phone call
 
 - [ ] **Real telephony account + credentials** — an actual FreJun Teler or
@@ -52,7 +94,12 @@ human (the founder, or someone he hires/contracts) must do.
   all real gaps found in testing with a synchronous fake transport. A live
   call's real timing will expose these — budget engineering time to fix
   before or immediately after the first real pilot calls, not after a full
-  customer launch.
+  customer launch. **Re-confirmed still correctly deferred in the
+  gap-closing pass** (post-Phase-10 audit): a real Pipecat `Pipeline`/VAD
+  wiring genuinely needs live audio timing to build/tune against — nothing
+  changed since Phase 3.5/4 that would make this buildable without a real
+  provider account, and this item plus "a production ASGI/WebSocket server
+  process" below already catalog exactly this work.
 - [ ] **DND/consent data correctness in production** — the compliance gate
   (`lib/compliance/gate.ts`) is structurally unbypassable and tested, but
   it only enforces what `lead_compliance` rows say; it cannot itself verify
@@ -99,11 +146,14 @@ human (the founder, or someone he hires/contracts) must do.
   instance (see that doc's manual smoke-test checklist). Do the checklist
   before relying on any n8n-driven automation (lead intake, WhatsApp
   follow-up, daily summary) for real revenue-generating traffic.
-- [ ] **Per-tenant n8n webhook tokens** — Phase 6 shipped one shared secret
-  per n8n instance (`docs/N8N_WORKFLOWS.md`'s "Deferred" section); a leaked
-  shared secret currently lets a caller address any org's n8n endpoints if
-  they also know that org's id. Move to a per-tenant, server-resolved
-  token before onboarding a second real tenant with n8n automation enabled.
+- [x] **Per-tenant n8n webhook tokens** — ~~Phase 6 shipped one shared
+  secret per n8n instance~~ **FIXED in the gap-closing pass** (post-Phase-10
+  audit): `n8n_webhook_tokens` (db/migrations/016_gap_closing_pass.sql) +
+  `resolve_org_by_n8n_token()` now resolve the trusted org from the token
+  alone; a caller-supplied `orgId` in a request body/query is no longer
+  trusted for tenant selection at all. Generate/rotate a token per tenant
+  at `/dashboard/settings/n8n` before onboarding each real tenant with n8n
+  automation enabled. See `docs/N8N_WORKFLOWS.md`.
 
 ## Category C — must-have before scaling beyond a first pilot tenant
 
@@ -154,9 +204,8 @@ human (the founder, or someone he hires/contracts) must do.
 - [ ] **A UI for `promote_org_role()` / reseller onboarding** — currently a
   direct DB call (`docs/RESELLER_HIERARCHY.md` §6), same bar as Phase 7's
   provider/plan seeding. Fine for a founder-run early stage; worth a UI
-  once reseller onboarding volume justifies it.
-  A `CHECK`/trigger enforcing `parent_reseller_id`'s target `org_role` is
-  the same "not needed to prove the mechanism yet" deferral.
+  once reseller onboarding volume justifies it. (The `parent_reseller_id`
+  validity constraint this item used to bundle in is now FIXED — see below.)
 - [ ] **A per-provider markup matrix** for reseller buy/sell rates (currently
   one global USD/minute rate per reseller — `docs/RESELLER_HIERARCHY.md` §2)
   — extensible without a breaking schema change whenever a reseller
@@ -164,7 +213,15 @@ human (the founder, or someone he hires/contracts) must do.
 - [ ] **Cashfree adapter implementation** (currently cataloged but not built
   — `docs/STACK_PROPOSAL.md`'s payment-gateway section) — a cost-
   optimization fallback once real Razorpay volume justifies a quote
-  comparison, not needed for launch.
+  comparison, not needed for launch. **Re-confirmed in the gap-closing
+  pass**: still correctly catalog-only, no urgent need for a second
+  live-tested payment gateway yet.
+- [ ] **Invoice PDF rendering** — `apps/web/lib/billing/invoices.ts` computes
+  and stores every invoice's line items/totals correctly; only the PDF
+  RENDERING step is deferred (see that file's own comment). **Re-confirmed
+  in the gap-closing pass**: still correctly deferred — this is legitimate
+  later-polish work (a template/rendering library choice), not needed to
+  prove the billing mechanism, and not touched in this pass.
 - [ ] **Gupshup/direct Meta Cloud API WhatsApp adapters** beyond the
   existing Interakt default — same "documented alternate, not urgent"
   status as Cashfree.

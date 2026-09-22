@@ -54,6 +54,79 @@ export class VoiceGatewayNotifyError extends Error {
  * `{ throwOnError: true }` for a caller (e.g. a test, or a future
  * synchronous "start call" admin action) that wants to see the failure.
  */
+/** The Prompt-to-Agent Builder's generated-config shape, mirroring
+ * `services/voice-gateway/voice_gateway/agent_builder/parser.py`'s
+ * `GeneratedAgentConfig` field-for-field (its `dataclasses.asdict()` output
+ * is exactly this JSON shape) — see docs/PROMPT_TO_AGENT_BUILDER.md §3. */
+export type GeneratedAgentConfig = {
+  clarification_needed: boolean;
+  clarification_questions: string[];
+  inferred_vertical: string | null;
+  inferred_vertical_confidence: "high" | "medium" | "low" | null;
+  agent_persona: { name: string | null; tone: string | null; language_style: string | null } | null;
+  greeting_script: string | null;
+  qualification_questions: { question: string; purpose: string | null; maps_to_field: string | null }[];
+  objection_handling: { objection: string; response_stub: string | null }[];
+  tools_needed: { tool_name: string; description: string | null; example_use: string | null }[];
+  knowledge_base_suggested_categories: string[];
+  knowledge_base_seed_faqs: { question: string; answer_stub: string | null }[];
+  suggested_pipeline_stages: string[];
+  suggested_dispositions: string[];
+  suggested_lead_scoring_criteria: { criterion: string; weight_hint: "high" | "medium" | "low" | null }[];
+  compliance_flags: string[];
+  needs_review: boolean;
+  raw_llm_output: string | null;
+};
+
+export class VoiceGatewayGenerateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "VoiceGatewayGenerateError";
+  }
+}
+
+/**
+ * POSTs to the voice-gateway's `/internal/agent-builder/generate` route
+ * (`voice_gateway/agent_builder/api.py`'s `handle_generate_request`) — the
+ * Prompt-to-Agent Builder's one meta-prompt LLM call, which consumes the
+ * Phase 3 LLM Provider Registry on the voice-gateway side (never a
+ * duplicated LLM integration here). Unlike `notifyCallAnswered`, a failure
+ * here IS thrown by default — this is a synchronous, user-facing
+ * generation request (the tenant is waiting on a result), not a
+ * fire-and-forget webhook side-effect.
+ */
+export async function generateAgentConfig(
+  params: { orgId: string; userId?: string | null; description: string; clarificationAnswers?: string | null },
+  opts: { fetchImpl?: typeof fetch } = {}
+): Promise<GeneratedAgentConfig> {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const baseUrl = process.env.VOICE_GATEWAY_URL ?? DEFAULT_VOICE_GATEWAY_URL;
+  const url = `${baseUrl}/internal/agent-builder/generate`;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orgId: params.orgId,
+        userId: params.userId ?? null,
+        description: params.description,
+        clarificationAnswers: params.clarificationAnswers ?? null,
+      }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error calling voice-gateway";
+    throw new VoiceGatewayGenerateError(`voice-gateway generateAgentConfig failed: ${message}`);
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new VoiceGatewayGenerateError(`voice-gateway generateAgentConfig failed: ${res.status} ${text}`);
+  }
+  return (await res.json()) as GeneratedAgentConfig;
+}
+
 export async function notifyCallAnswered(
   params: NotifyCallAnsweredParams,
   opts: { fetchImpl?: typeof fetch; throwOnError?: boolean } = {}

@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import {
   buildScoreboard,
   loadProviderCostStats,
+  loadProviderFailoverStats,
   loadProviderLatencyStats,
   type ProviderCostStat,
   type ProviderLatencyStat,
@@ -125,4 +126,22 @@ describe("loadProviderCostStats / loadProviderLatencyStats — real aggregation 
     expect(a.avgDurationS).toBeCloseTo(0.5, 6); // (0.4 + 0.6) / 2
     expect(a.sampleCount).toBe(2);
   });
+
+  it(
+    "loadProviderFailoverStats (gap-closing pass: wires platform_failover_stats() into the Provider " +
+      "Scoreboard, which existed since Phase 9 but had no UI reader) aggregates event counts correctly",
+    async () => {
+      await admin.query(
+        `INSERT INTO provider_failover_events (org_id, layer, from_provider, to_provider, reason) VALUES
+           ($1, 'stt', $2, $3, 'timeout'), ($1, 'stt', $2, $3, 'error')`,
+        [orgId, providerKeyA, providerKeyB]
+      );
+
+      const stats = await withTenant(orgId, null, (client) => loadProviderFailoverStats(client));
+      const row = stats.find((s) => s.fromProvider === providerKeyA && s.toProvider === providerKeyB)!;
+      expect(row).toBeTruthy();
+      expect(row.eventCount).toBe(2);
+      expect(row.layer).toBe("stt");
+    }
+  );
 });

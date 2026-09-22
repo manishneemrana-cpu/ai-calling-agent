@@ -10,10 +10,12 @@ export default async function AgentsPage() {
   return (
     <div className="card">
       <h1>Agents</h1>
+      <p style={{ marginBottom: "1rem" }}>
+        <a href="/dashboard/agents/new">+ Build a new agent from a description</a>
+      </p>
       {prompts.length === 0 ? (
         <p className="empty-state">
-          No agents yet. The Prompt-to-Agent Builder (Phase 2+) will let you describe your
-          business and generate one here.
+          No agents yet — use the Prompt-to-Agent Builder above to describe your business and generate one.
         </p>
       ) : (
         <table>

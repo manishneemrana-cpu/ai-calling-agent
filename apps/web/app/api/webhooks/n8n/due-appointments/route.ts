@@ -15,16 +15,17 @@ import { assertValidN8nRequest, N8nAuthError } from "@/lib/webhooks/n8n-auth";
  * only; it never sends anything itself (n8n stays control-plane only).
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  // The org is resolved from the per-tenant webhook token, never from
+  // `?orgId=` — see lib/webhooks/n8n-auth.ts's gap-closing-pass doc comment.
+  let orgId: string;
   try {
-    await assertValidN8nRequest(req);
+    orgId = await assertValidN8nRequest(req);
   } catch (err) {
     if (err instanceof N8nAuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
   }
 
   const { searchParams } = new URL(req.url);
-  const orgId = searchParams.get("orgId");
-  if (!orgId) return NextResponse.json({ error: "orgId is required" }, { status: 400 });
   const withinHours = Math.min(Number(searchParams.get("withinHours") ?? "24"), 168);
 
   const appointments = await withTenant(orgId, null, async (client) => {

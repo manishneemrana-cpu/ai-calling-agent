@@ -112,6 +112,36 @@ export async function loadProviderLatencyStats(client: PoolClient): Promise<Prov
   }));
 }
 
+export type ProviderFailoverStat = {
+  layer: string;
+  fromProvider: string;
+  toProvider: string;
+  eventCount: number;
+  lastEventAt: string;
+};
+
+/**
+ * Gap-closing pass: Phase 9 built `provider_failover_events` +
+ * `platform_failover_stats()` (db/migrations/014_phase9_observability_failover.sql)
+ * but never wired a UI to it — this was the one item Phase 9's own report
+ * left genuinely undone (not just deferred), and it's cheap: the SQL
+ * function already exists and does the aggregation, this just reads it.
+ * Same "call the existing SECURITY DEFINER function, works with any
+ * PoolClient" pattern as `loadProviderCostStats` above.
+ */
+export async function loadProviderFailoverStats(client: PoolClient): Promise<ProviderFailoverStat[]> {
+  const { rows } = await client.query(
+    `SELECT layer, from_provider, to_provider, event_count, last_event_at FROM platform_failover_stats()`
+  );
+  return rows.map((r) => ({
+    layer: r.layer,
+    fromProvider: r.from_provider,
+    toProvider: r.to_provider,
+    eventCount: Number(r.event_count),
+    lastEventAt: r.last_event_at,
+  }));
+}
+
 export async function loadProviderQualityRatings(client: PoolClient): Promise<ProviderQualityRating[]> {
   const { rows } = await client.query(
     `SELECT layer, provider_key, metric, score, rated_by, notes FROM provider_quality_ratings`

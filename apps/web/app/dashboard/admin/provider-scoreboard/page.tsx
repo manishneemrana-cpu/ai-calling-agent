@@ -3,6 +3,7 @@ import { withoutTenant } from "@/lib/db/tenant";
 import {
   buildScoreboard,
   loadProviderCostStats,
+  loadProviderFailoverStats,
   loadProviderLatencyStats,
   loadProviderQualityRatings,
 } from "@/lib/billing/scoreboard";
@@ -35,10 +36,11 @@ export default async function ProviderScoreboardPage() {
     );
   }
 
-  const { costStats, latencyStats, qualityRatings } = await withoutTenant(async (client) => ({
+  const { costStats, latencyStats, qualityRatings, failoverStats } = await withoutTenant(async (client) => ({
     costStats: await loadProviderCostStats(client),
     latencyStats: await loadProviderLatencyStats(client),
     qualityRatings: await loadProviderQualityRatings(client),
+    failoverStats: await loadProviderFailoverStats(client),
   }));
 
   const rows = buildScoreboard(costStats, latencyStats, qualityRatings);
@@ -78,6 +80,39 @@ export default async function ProviderScoreboardPage() {
                 <td>{r.avgLatencyS !== null ? r.avgLatencyS.toFixed(3) : "no data yet"}</td>
                 <td>{r.manualQualityScore !== null ? r.manualQualityScore.toFixed(1) : "not rated"}</td>
                 <td>{r.compositeScore !== null ? r.compositeScore.toFixed(3) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h2 style={{ marginTop: "2rem" }}>Failover frequency</h2>
+      <p className="empty-state" style={{ marginBottom: "1rem" }}>
+        Gap-closing pass: Phase 9 built <code>provider_failover_events</code> / <code>platform_failover_stats()</code>{" "}
+        but never surfaced them in this UI — wired in now, no new data collection. Counts every recorded
+        primary-to-fallback provider switch, across every tenant.
+      </p>
+      {failoverStats.length === 0 ? (
+        <p className="empty-state">No failover events recorded yet.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Layer</th>
+              <th>From provider</th>
+              <th>To provider</th>
+              <th>Event count</th>
+              <th>Last event</th>
+            </tr>
+          </thead>
+          <tbody>
+            {failoverStats.map((f) => (
+              <tr key={`${f.layer}:${f.fromProvider}:${f.toProvider}`}>
+                <td>{f.layer}</td>
+                <td>{f.fromProvider}</td>
+                <td>{f.toProvider}</td>
+                <td>{f.eventCount}</td>
+                <td>{new Date(f.lastEventAt).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>

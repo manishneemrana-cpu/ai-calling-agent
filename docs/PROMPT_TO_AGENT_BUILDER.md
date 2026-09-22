@@ -163,3 +163,93 @@ Once enough tenants have gone through the builder, the platform can optionally c
 2. UX for the clarification round-trip (inline chat-style Q&A vs. a short form) — a product/design decision, not an AI-architecture one.
 3. Whether `agent_prompts` needs an explicit `generated_by: "prompt_builder" | "manual"` + `source_description` column for audit/debugging traceability — recommended, to be confirmed in Phase 1 schema design.
 4. Legal/compliance review of any auto-generated greeting/consent language before it is used in production calls (per `COMPLIANCE.md`'s non-legal-advice framing) — the meta-prompt should never be the final authority on consent wording.
+
+## 9. Implementation (gap-closing pass, post-Phase-10)
+
+This feature was designed here since Phase 0 but never actually implemented
+in code through Phases 1-10 — Phase 10's own security audit flagged this as
+the platform's single most important gap. This section documents what was
+actually built and why, closing §8's open questions against what the
+codebase looks like by Phase 10 rather than re-litigating them from a
+blank slate.
+
+**Which runtime owns it, and why**: `services/voice-gateway`
+(`voice_gateway/agent_builder/`), NOT `apps/web`. The meta-prompt call
+needs the Phase 3 LLM Provider Registry
+(`voice_gateway.registry.get_provider("llm", org_id, user_id)`), which
+lives only in the Python runtime — there is no parallel LLM registry in
+`apps/web` (its `lib/providers/registry.ts` covers telephony/WhatsApp/
+payment-gateway only), and duplicating one there would violate
+`docs/PROVIDER_REGISTRY.md`'s "one registry per layer" rule. Since
+`agent_prompts` / `pipeline_stages` / `dispositions` /
+`lead_scoring_criteria` are `apps/web`-owned Postgres tables (accessed
+through `withTenant`/RLS, not from Python), the split is: voice-gateway
+generates and parses, apps/web commits. The bridge between them is a new
+internal HTTP endpoint, `POST /internal/agent-builder/generate`
+(`voice_gateway/media_stream/internal_api.py`'s `serve()`, alongside the
+existing `/internal/pipelines/{id}/start` route), called by
+`apps/web/lib/voice-gateway/client.ts`'s `generateAgentConfig()` — the
+EXACT same call-direction/DI pattern Phase 3.5/4 already established for
+`notifyCallAnswered()`, reused rather than inventing a second bridge shape.
+
+**Structured-output parsing**: `voice_gateway/agent_builder/parser.py`'s
+`parse_generation_response()` mirrors `voice_gateway/crm/summary.py`'s
+`parse_summary_response()` field-for-field in discipline: never raises,
+strips a markdown code fence if present, and on any parse/validation
+failure (or a full-generation response missing persona/greeting/
+qualification-questions/pipeline-stages/dispositions) returns a result
+with `needs_review=True` and `raw_llm_output` preserved verbatim, with
+whatever fields WERE recoverable still populated. `commitGeneratedConfig`
+(`apps/web/lib/agent-builder/commit.ts`) refuses to write a
+`needs_review` or `clarification_needed` result to the database at all —
+a second, independent safety rail on top of the parser's own flag.
+
+**Clarification flow**: exactly one LLM call either way, per §2 — the
+meta-prompt (`voice_gateway/agent_builder/meta_prompt.py`) asks the model
+to self-report `clarification_needed` and, when true, 1-3 targeted
+questions; the second round (`clarification_answers`) is appended to the
+SAME original description and re-sent through the identical
+`build_generation_messages()` call, never a separate code path.
+
+**Commit step (reuse, not reinvention)**: `commitGeneratedConfig` calls
+Phase 5's own `instantiateStagesFromSuggestions()` /
+`instantiateDispositionsFromSuggestions()` /
+`instantiateScoringCriteriaFromSuggestions()`
+(`apps/web/lib/crm/pipeline.ts` / `dispositions.ts` / `scoring.ts`)
+verbatim — these functions already existed, built in Phase 5 specifically
+for this caller (see `docs/CRM_LOGIC.md`'s "Prompt-to-Agent Builder's own
+output" path) and left unused until now. No new CRM-writing code exists;
+this pass only added the config-generation half and the plumbing to call
+Phase 5's existing writers.
+
+**Input safety** (Phase 10 discipline applied to a new surface): the
+free-text description is length-bounded (4000 chars; clarification
+answers 2000) both in `apps/web`'s API route (zod) AND independently in
+`voice_gateway/agent_builder/generator.py` (so a caller bypassing the
+Next.js route can't send an unbounded payload straight to the LLM). The
+meta-prompt's system prompt explicitly instructs the model to treat the
+description as DATA, never as instructions that override the system
+prompt, and states that the GENERATED config itself must never instruct
+the calling agent to state unverifiable facts, claim a capability with no
+matching `tools_needed` entry, or bypass consent/DND handling — the
+platform's non-negotiable guardrails from `docs/COMPLIANCE.md` /
+`voice_gateway/knowledge/grounding.py` apply to every generated config
+regardless of what a tenant's description asks for. This is prompt-level
+defense only, not a substitute for the tenant-review step before a config
+goes live (§2), and not a claim of full injection-hardening — a
+determined adversarial input could still degrade output quality even if
+it cannot make the generated config bypass platform guardrails outright.
+
+**UI**: `/dashboard/agents/new` — plumbing-proof (describe → clarify if
+asked → review generated config → confirm), same austerity as every prior
+phase's UI; the professional UI/UX pass is a separate, later task.
+
+**Tests**: the 3 worked examples from §5 (real estate, diagnostics,
+D2C), tested against a mocked LLM response shaped exactly like each
+example, on both sides — `services/voice-gateway/tests/agent_builder/`
+(parser/generator/API) and `apps/web/tests/agent-builder/` (commit +
+routes, against real Postgres) — plus a deliberately vague-description
+fixture proving the clarification branch, a malformed-LLM-output fixture
+proving the parser never crashes and flags for review, and tenant-isolation
+coverage for the new commit path (no new tables were added — everything
+writes into tables Phase 5 already isolated).

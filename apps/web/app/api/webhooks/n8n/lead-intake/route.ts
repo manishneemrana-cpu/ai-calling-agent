@@ -19,8 +19,12 @@ import { createOutboundCall, ComplianceBlockedError, ProviderNotConfiguredError 
  * assumed to be indefinite consent.
  */
 
+// `orgId`, if present, is accepted-but-ignored for backward-compatible
+// request shapes — the trusted org is always the one resolved from the
+// per-tenant webhook token (see lib/webhooks/n8n-auth.ts's
+// gap-closing-pass doc comment).
 const schema = z.object({
-  orgId: z.string().uuid(),
+  orgId: z.string().uuid().optional(),
   fullName: z.string().optional(),
   phoneNumber: z.string().min(3),
   email: z.string().email().optional(),
@@ -31,8 +35,9 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  let orgId: string;
   try {
-    await assertValidN8nRequest(req);
+    orgId = await assertValidN8nRequest(req);
   } catch (err) {
     if (err instanceof N8nAuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
@@ -43,7 +48,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { orgId, fullName, phoneNumber, email, agentId, fromNumber, customFields, triggerCall } = parsed.data;
+  const { fullName, phoneNumber, email, agentId, fromNumber, customFields, triggerCall } = parsed.data;
 
   const lead = await withTenant(orgId, null, async (client) => {
     const { rows } = await client.query(

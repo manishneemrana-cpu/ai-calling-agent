@@ -14,8 +14,12 @@ import { getWhatsAppProvider, ProviderNotConfiguredError } from "@/lib/providers
  * n8n rule).
  */
 
+// `orgId`, if present, is accepted-but-ignored for backward-compatible
+// request shapes — the trusted org is always the one resolved from the
+// per-tenant webhook token (see lib/webhooks/n8n-auth.ts's
+// gap-closing-pass doc comment).
 const schema = z.object({
-  orgId: z.string().uuid(),
+  orgId: z.string().uuid().optional(),
   leadId: z.string().uuid(),
   toNumber: z.string().min(3),
   templateKey: z.string().min(1).default("qualified_lead_follow_up"),
@@ -23,8 +27,9 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  let orgId: string;
   try {
-    await assertValidN8nRequest(req);
+    orgId = await assertValidN8nRequest(req);
   } catch (err) {
     if (err instanceof N8nAuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
@@ -35,7 +40,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { orgId, leadId, toNumber, templateKey, variables } = parsed.data;
+  const { leadId, toNumber, templateKey, variables } = parsed.data;
 
   try {
     const provider = await getWhatsAppProvider(orgId, null);

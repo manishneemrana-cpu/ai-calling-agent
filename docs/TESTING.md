@@ -46,18 +46,20 @@ cp .env.example services/voice-gateway/.env
 ## Running each suite individually
 
 ```bash
-# TypeScript (apps/web) — Vitest, 187 tests as of Phase 10 (177 through
-# Phase 9 + 10 new Phase 10 RBAC/rate-limit/audit-log tests)
+# TypeScript (apps/web) — Vitest, 209 tests as of the gap-closing pass
+# (187 through Phase 10 + 22 new: Prompt-to-Agent Builder commit/routes,
+# per-tenant n8n token, provider-scoreboard failover stats)
 npm run test -w apps/web
 
-# Python (services/voice-gateway) — pytest, 109 tests as of Phase 9,
-# unchanged this phase (Phase 10's fixes were all TypeScript-side)
+# Python (services/voice-gateway) — pytest, 137 tests as of the
+# gap-closing pass (109 through Phase 9 + 28 new: the Prompt-to-Agent
+# Builder's meta-prompt/parser/generator/internal-API modules)
 cd services/voice-gateway && source .venv/bin/activate && python -m pytest -q
 ```
 
-Cumulative: **296 tests** (187 + 109) as of Phase 10, all against a fresh
-migration on a clean database, verified as part of this phase's own
-verification step (not just claimed — see the Phase 10 commit).
+Cumulative: **346 tests** (209 + 137) as of the gap-closing pass (up from
+296 at Phase 10), all against a fresh migration on a clean database,
+verified as part of that pass's own verification step (not just claimed).
 
 ## What "no reachable Postgres" skips mean (and why they're fine)
 

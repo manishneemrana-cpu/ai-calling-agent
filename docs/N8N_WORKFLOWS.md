@@ -41,10 +41,26 @@ Every workflow references these (set once per n8n instance/tenant):
 | Variable | Purpose |
 |---|---|
 | `APP_BASE_URL` | This app's base URL, e.g. `https://app.example.com` |
-| `N8N_WEBHOOK_SHARED_SECRET` | Must match this app's `N8N_WEBHOOK_SHARED_SECRET` env var — see `apps/web/lib/webhooks/n8n-auth.ts` |
-| `TENANT_ORG_ID` | The org these workflows act on behalf of (Phase 6 minimum: one shared secret + explicit org id per n8n instance; see "Deferred" below) |
+| `N8N_WEBHOOK_SHARED_SECRET` | **Gap-closing pass:** this tenant's OWN per-tenant token, generated/rotated from `/dashboard/settings/n8n` (`n8n_webhook_tokens` — db/migrations/016_gap_closing_pass.sql). No longer a platform-wide shared value — see "Per-tenant webhook tokens" below. |
+| `TENANT_ORG_ID` | Still referenced by these workflow JSONs' request bodies/query strings for backward-compatible request shapes, but **no longer trusted for tenant selection** — the org is always the one the token above resolves to (`apps/web/lib/webhooks/n8n-auth.ts`'s `assertValidN8nRequest`). Safe to keep sending; harmless if omitted. |
 | `DEFAULT_CALLER_ID` | Outbound caller-id number for call-triggering workflows |
 | `SUMMARY_FROM_EMAIL` / `OWNER_EMAIL` | Only for `daily-summary-to-owner.json`'s Email node |
+
+### Per-tenant webhook tokens (FIXED — gap-closing pass)
+
+Phase 6 shipped one shared secret plus an explicit `orgId` in each
+request's body/query; Phase 10's audit re-flagged this as a real gap
+without fixing it. This is now fixed: each org generates its own token at
+`/dashboard/settings/n8n` (shown once, only its SHA-256 hash is stored),
+and `assertValidN8nRequest()` resolves the trusted org id FROM that token
+alone (`resolve_org_by_n8n_token()`, a SECURITY DEFINER lookup — same
+pre-auth pattern as `resolve_session()`). Every one of the 6 endpoints now
+uses that resolved org id for every DB operation; a caller-supplied
+`orgId` in the body/query is parsed (for backward compatibility with the
+existing workflow JSONs) but never trusted — proven by
+`apps/web/tests/webhooks/n8n.test.ts`'s "a caller-supplied orgId in the
+body is IGNORED" test, which shows a request carrying another org's id in
+its body still gets scoped to the TOKEN's org.
 
 ## The 6 workflows
 
@@ -89,12 +105,8 @@ Every workflow references these (set once per n8n instance/tenant):
 
 ## Deferred / follow-up (Phase 7+)
 
-- **Per-tenant webhook tokens.** Phase 6 ships one shared secret plus an
-  explicit `orgId` field/env var per n8n instance. A leaked shared secret
-  currently lets a caller address any org's endpoints if they also guess/
-  know that org's id. A per-tenant token (looked up server-side, never
-  supplied by the caller) is the correct design for multi-tenant
-  production use and is not yet built.
+- ~~**Per-tenant webhook tokens.**~~ **FIXED in the gap-closing pass** — see
+  "Per-tenant webhook tokens" above.
 - **A real n8n container actually wired up and exercised** against a
   staging deployment of this app, replacing this document's manual
   checklist with an actual executed run log.

@@ -8,16 +8,21 @@ import { POST as qualifiedLeadWhatsapp } from "@/app/api/webhooks/n8n/qualified-
 import { GET as dueAppointments } from "@/app/api/webhooks/n8n/due-appointments/route";
 import { GET as dailySummary } from "@/app/api/webhooks/n8n/daily-summary/route";
 import { MockWhatsAppProvider } from "@/lib/providers/whatsapp/adapters/mock";
+import { hashN8nToken } from "@/lib/webhooks/n8n-auth";
 
 const ADMIN_URL =
   process.env.DATABASE_URL_MIGRATE ?? "postgresql://postgres:postgres@localhost:5432/ai_calling_agent";
-const SECRET = "test-n8n-shared-secret";
+// This org's own per-tenant token (db/migrations/016_gap_closing_pass.sql)
+// — gap-closing pass: no more platform-wide shared secret. A second org's
+// token is set up separately below to prove cross-tenant isolation.
+const SECRET = "test-n8n-per-tenant-token";
+const OTHER_ORG_SECRET = "test-n8n-per-tenant-token-other-org";
 
 let admin: Client;
 let orgId: string;
+let otherOrgId: string;
 
 beforeAll(async () => {
-  process.env.N8N_WEBHOOK_SHARED_SECRET = SECRET;
   process.env.PROVIDER_CONFIG_ENCRYPTION_KEY ??= "test-only-encryption-key-do-not-use-in-prod";
   admin = new Client({ connectionString: ADMIN_URL });
   await admin.connect();
@@ -33,10 +38,25 @@ beforeAll(async () => {
       ($1, 'whatsapp', 'mock', true, 1, '{}'::jsonb)`,
     [orgId]
   );
+  await admin.query("INSERT INTO n8n_webhook_tokens (org_id, token_hash) VALUES ($1, $2)", [
+    orgId,
+    hashN8nToken(SECRET),
+  ]);
+
+  const otherOrgRow = await admin.query("INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id", [
+    `n8n Webhook Test Other Org ${suffix}`,
+    `n8n-webhook-test-other-org-${suffix}`,
+  ]);
+  otherOrgId = otherOrgRow.rows[0].id;
+  await admin.query("INSERT INTO n8n_webhook_tokens (org_id, token_hash) VALUES ($1, $2)", [
+    otherOrgId,
+    hashN8nToken(OTHER_ORG_SECRET),
+  ]);
 });
 
 afterAll(async () => {
   await admin.query("DELETE FROM organizations WHERE id = $1", [orgId]);
+  await admin.query("DELETE FROM organizations WHERE id = $1", [otherOrgId]);
   await admin.end();
 });
 
@@ -53,10 +73,44 @@ function req(url: string, body?: unknown, token = SECRET): NextRequest {
 }
 
 describe("n8n control-plane webhooks", () => {
-  it("rejects every endpoint without a valid shared-secret token", async () => {
+  it("rejects every endpoint without a valid per-tenant token", async () => {
     const badReq = req("http://localhost/api/webhooks/n8n/lead-intake", { orgId, phoneNumber: "+91" }, "wrong");
     const res = await leadIntake(badReq);
     expect(res.status).toBe(401);
+  });
+
+  it(
+    "gap-closing fix: a caller-supplied orgId in the body is IGNORED — the org is always the one " +
+      "the token resolves to, so a leaked/guessed orgId cannot redirect a request to another tenant",
+    async () => {
+      const res = await leadIntake(
+        req(
+          "http://localhost/api/webhooks/n8n/lead-intake",
+          { orgId: otherOrgId, fullName: "Spoofed Org Lead", phoneNumber: "+919812355555", triggerCall: false },
+          SECRET // this org's own token, but claiming to act as `otherOrgId` in the body
+        )
+      );
+      expect(res.status).toBe(201);
+      const body = await res.json();
+
+      const { rows } = await admin.query("SELECT org_id FROM leads WHERE id = $1", [body.lead.id]);
+      expect(rows[0].org_id).toBe(orgId); // created under the TOKEN's org, never the spoofed body orgId
+      expect(rows[0].org_id).not.toBe(otherOrgId);
+    }
+  );
+
+  it("one org's token cannot be used to address another org's per-tenant-token-resolved data at all", async () => {
+    const res = await leadIntake(
+      req(
+        "http://localhost/api/webhooks/n8n/lead-intake",
+        { fullName: "Other Org Lead", phoneNumber: "+919812366666", triggerCall: false },
+        OTHER_ORG_SECRET
+      )
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    const { rows } = await admin.query("SELECT org_id FROM leads WHERE id = $1", [body.lead.id]);
+    expect(rows[0].org_id).toBe(otherOrgId);
   });
 
   it("lead-intake creates a lead with 7-day web_form consent and places a call through the compliance-gated path", async () => {

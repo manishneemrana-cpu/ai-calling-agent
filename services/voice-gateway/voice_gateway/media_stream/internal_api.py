@@ -72,24 +72,38 @@ async def serve(pipeline_manager: PipelineManager, *, host: str = "0.0.0.0", por
     the `asyncio.Server` (call `.close()` / `await .wait_closed()` to stop
     it) — not exercised by the test suite, which calls
     `handle_start_pipeline_request()` directly; this exists for the actual
-    deployed process's entrypoint."""
+    deployed process's entrypoint.
+
+    Also serves `POST /internal/agent-builder/generate` (the
+    Prompt-to-Agent Builder's one-LLM-call generation endpoint — see
+    `voice_gateway/agent_builder/api.py`), wired here rather than as a
+    second listener so apps/web only ever needs one `VOICE_GATEWAY_URL`
+    for every internal call this service exposes."""
     import asyncio
     import re
 
-    route_re = re.compile(r"^/internal/pipelines/(?P<call_id>[^/]+)/start$")
+    from ..agent_builder.api import GenerateAgentConfigRequestError, handle_generate_request
+
+    pipeline_route_re = re.compile(r"^/internal/pipelines/(?P<call_id>[^/]+)/start$")
+    agent_builder_route = "/internal/agent-builder/generate"
 
     async def _client_connected(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         raw = await reader.read(65536)
         try:
             method, path, body = _parse_http_request_line_and_body(raw)
-            match = route_re.match(path)
-            if method != "POST" or not match:
+            pipeline_match = pipeline_route_re.match(path)
+            if method == "POST" and pipeline_match:
+                body["callId"] = pipeline_match.group("call_id")
+                result = await handle_start_pipeline_request(body, pipeline_manager)
+                _write_response(writer, 200, result)
+            elif method == "POST" and path == agent_builder_route:
+                result = await handle_generate_request(body)
+                _write_response(writer, 200, result)
+            else:
                 _write_response(writer, 404, {"error": "not found"})
-                return
-            body["callId"] = match.group("call_id")
-            result = await handle_start_pipeline_request(body, pipeline_manager)
-            _write_response(writer, 200, result)
         except StartPipelineRequestError as err:
+            _write_response(writer, 400, {"error": str(err)})
+        except GenerateAgentConfigRequestError as err:
             _write_response(writer, 400, {"error": str(err)})
         except Exception as err:  # pragma: no cover - defensive
             _write_response(writer, 500, {"error": str(err)})

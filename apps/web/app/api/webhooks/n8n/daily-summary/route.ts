@@ -9,16 +9,17 @@ import { assertValidN8nRequest, N8nAuthError } from "@/lib/webhooks/n8n-auth";
  * this endpoint never sends anything itself.
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  // The org is resolved from the per-tenant webhook token, never from the
+  // `?orgId=` query param (see lib/webhooks/n8n-auth.ts's gap-closing-pass
+  // doc comment) — a `?orgId=` on the URL is accepted-but-ignored for
+  // backward-compatible request shapes only.
+  let orgId: string;
   try {
-    await assertValidN8nRequest(req);
+    orgId = await assertValidN8nRequest(req);
   } catch (err) {
     if (err instanceof N8nAuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
   }
-
-  const { searchParams } = new URL(req.url);
-  const orgId = searchParams.get("orgId");
-  if (!orgId) return NextResponse.json({ error: "orgId is required" }, { status: 400 });
 
   const summary = await withTenant(orgId, null, async (client) => {
     // Sequential, not Promise.all: a single pg Client cannot pipeline
