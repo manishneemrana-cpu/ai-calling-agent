@@ -200,4 +200,144 @@ describe("tenant isolation (RLS)", () => {
       await client.end();
     }
   });
+
+  // --- Phase 5: CRM tables (db/migrations/010_crm_pipeline.sql) ----------
+
+  it("the pipeline_stage_templates / disposition_templates catalogs are readable by every tenant", async () => {
+    const rows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT template_key FROM pipeline_stage_templates");
+      return rows;
+    });
+    expect(rows.map((r) => r.template_key)).toEqual(expect.arrayContaining(["generic_default", "real_estate"]));
+
+    const dispositionRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT template_key FROM disposition_templates");
+      return rows;
+    });
+    expect(dispositionRows.map((r) => r.template_key)).toEqual(expect.arrayContaining(["default"]));
+  });
+
+  it("org B cannot read org A's pipeline_stages", async () => {
+    await admin.query(
+      `INSERT INTO pipeline_stages (org_id, stage_key, display_name, sort_order)
+       VALUES ($1, 'new', 'New', 0)`,
+      [orgA]
+    );
+
+    const orgARows = await asTenant(orgA, userA, async (c) => {
+      const { rows } = await c.query("SELECT stage_key FROM pipeline_stages WHERE org_id = $1", [orgA]);
+      return rows;
+    });
+    expect(orgARows).toHaveLength(1);
+
+    const orgBRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT * FROM pipeline_stages");
+      return rows;
+    });
+    expect(orgBRows).toHaveLength(0);
+
+    await expect(
+      asTenant(orgB, userB, async (c) => {
+        await c.query(
+          "INSERT INTO pipeline_stages (org_id, stage_key, display_name, sort_order) VALUES ($1, 'sneaky', 'Sneaky', 0)",
+          [orgA]
+        );
+      })
+    ).rejects.toThrow();
+  });
+
+  it("org B cannot read org A's dispositions", async () => {
+    await admin.query(
+      `INSERT INTO dispositions (org_id, disposition_key, display_name, category) VALUES ($1, 'connected', 'Connected', 'connected')`,
+      [orgA]
+    );
+
+    const orgBRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT * FROM dispositions");
+      return rows;
+    });
+    expect(orgBRows).toHaveLength(0);
+  });
+
+  it("org B cannot read org A's lead_scoring_criteria", async () => {
+    await admin.query(
+      `INSERT INTO lead_scoring_criteria (org_id, criterion_key, display_name, weight) VALUES ($1, 'budget_confirmed', 'Budget confirmed', 3)`,
+      [orgA]
+    );
+
+    const orgBRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT * FROM lead_scoring_criteria");
+      return rows;
+    });
+    expect(orgBRows).toHaveLength(0);
+  });
+
+  it("org B cannot read org A's lead_stage_history", async () => {
+    const leadRow = await admin.query(
+      "INSERT INTO leads (org_id, full_name, phone_number) VALUES ($1, 'History Lead', '+10000000001') RETURNING id",
+      [orgA]
+    );
+    const stageRow = await admin.query(
+      "INSERT INTO pipeline_stages (org_id, stage_key, display_name, sort_order) VALUES ($1, 'contacted', 'Contacted', 1) RETURNING id",
+      [orgA]
+    );
+    await admin.query(
+      "INSERT INTO lead_stage_history (org_id, lead_id, to_stage_id) VALUES ($1, $2, $3)",
+      [orgA, leadRow.rows[0].id, stageRow.rows[0].id]
+    );
+
+    const orgARows = await asTenant(orgA, userA, async (c) => {
+      const { rows } = await c.query("SELECT * FROM lead_stage_history WHERE lead_id = $1", [leadRow.rows[0].id]);
+      return rows;
+    });
+    expect(orgARows).toHaveLength(1);
+
+    const orgBRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT * FROM lead_stage_history");
+      return rows;
+    });
+    expect(orgBRows).toHaveLength(0);
+  });
+
+  it("org B cannot read org A's call_summaries", async () => {
+    const callRow = await admin.query(
+      "INSERT INTO calls (org_id, from_number, to_number, status) VALUES ($1, '+1000', '+2000', 'completed') RETURNING id",
+      [orgA]
+    );
+    await admin.query(
+      "INSERT INTO call_summaries (org_id, call_id, requirement_text) VALUES ($1, $2, 'wants a 2BHK')",
+      [orgA, callRow.rows[0].id]
+    );
+
+    const orgBRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT * FROM call_summaries");
+      return rows;
+    });
+    expect(orgBRows).toHaveLength(0);
+
+    await expect(
+      asTenant(orgB, userB, async (c) => {
+        await c.query("INSERT INTO call_summaries (org_id, call_id) VALUES ($1, $2)", [orgA, callRow.rows[0].id]);
+      })
+    ).rejects.toThrow();
+  });
+
+  it("org B cannot read org A's handoff_requests", async () => {
+    await admin.query(
+      `INSERT INTO handoff_requests (org_id, trigger_reason, transfer_type) VALUES ($1, 'explicit_request', 'warm')`,
+      [orgA]
+    );
+
+    const orgARows = await asTenant(orgA, userA, async (c) => {
+      const { rows } = await c.query("SELECT * FROM handoff_requests WHERE org_id = $1", [orgA]);
+      return rows;
+    });
+    expect(orgARows).toHaveLength(1);
+
+    const orgBRows = await asTenant(orgB, userB, async (c) => {
+      const { rows } = await c.query("SELECT * FROM handoff_requests");
+      return rows;
+    });
+    expect(orgBRows).toHaveLength(0);
+  });
 });
