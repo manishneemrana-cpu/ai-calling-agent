@@ -13,6 +13,7 @@
     "lint": "npm run lint -w apps/web",
     "typecheck": "npm run typecheck -w apps/web",
     "test": "npm run test -w apps/web",
+    "test:all": "bash scripts/test-all.sh",
     "migrate": "npm run migrate -w db"
   }
 }

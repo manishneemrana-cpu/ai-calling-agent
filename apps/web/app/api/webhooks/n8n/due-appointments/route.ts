@@ -16,7 +16,7 @@ import { assertValidN8nRequest, N8nAuthError } from "@/lib/webhooks/n8n-auth";
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    assertValidN8nRequest(req);
+    await assertValidN8nRequest(req);
   } catch (err) {
     if (err instanceof N8nAuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;

@@ -32,7 +32,7 @@ const schema = z.object({
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    assertValidN8nRequest(req);
+    await assertValidN8nRequest(req);
   } catch (err) {
     if (err instanceof N8nAuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;

@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { withTenant } from "../db/tenant";
+import { logAuditEvent, logAuditEventTx } from "../audit/log";
 
 /**
  * Wallet ledger discipline (Phase 7): a wallet's `balance` column is NEVER
@@ -101,6 +102,22 @@ export async function applyWalletTransaction(
     const balanceAfter = wallet.balance + delta;
 
     if (params.type === "debit" && balanceAfter < 0) {
+      // Phase 10: log the rejected attempt too — a repeated overdraft
+      // attempt (not just successful debits) is a signal a billing/fraud
+      // review should be able to see. Uses `logAuditEvent` (its own
+      // short-lived connection), NOT `logAuditEventTx` on this
+      // transaction's client — this transaction is about to throw and
+      // roll back (the whole point of this branch), which would silently
+      // discard an audit row written on the same connection/transaction.
+      if (params.reason !== "call_charge") {
+        await logAuditEvent({
+          orgId: params.orgId,
+          action: "billing.wallet_debit_rejected_insufficient_balance",
+          targetType: "wallet",
+          targetId: wallet.id,
+          metadata: { amount: params.amount, reason: params.reason, balance: wallet.balance },
+        });
+      }
       throw new InsufficientBalanceError(params.orgId);
     }
 
@@ -148,6 +165,24 @@ export async function applyWalletTransaction(
         `INSERT INTO billing_alerts (org_id, alert_type, details) VALUES ($1, $2, $3)`,
         [params.orgId, alertTriggered, JSON.stringify({ balance_after: balanceAfter })]
       );
+    }
+
+    if (params.reason !== "call_charge") {
+      // Phase 10: audit manual top-ups/refunds/adjustments (real money
+      // movement a human or another system explicitly triggered), but NOT
+      // per-call charges — those are already fully accounted for in
+      // `wallet_transactions`/`cost_records` at call volume, and mirroring
+      // every one into `audit_logs` too would flood the audit trail with
+      // routine, already-ledgered events rather than surfacing the
+      // higher-value "someone changed money outside normal call billing"
+      // signal this table exists for.
+      await logAuditEventTx(client, {
+        orgId: params.orgId,
+        action: params.type === "credit" ? "billing.wallet_credited" : "billing.wallet_debited",
+        targetType: "wallet",
+        targetId: wallet.id,
+        metadata: { amount: params.amount, reason: params.reason, balanceAfter, notes: params.notes ?? null },
+      });
     }
 
     return { walletId: wallet.id, balanceAfter, alertTriggered };

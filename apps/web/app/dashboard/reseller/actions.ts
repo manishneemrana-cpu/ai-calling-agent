@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession, requireRole, InsufficientRoleError } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
 import { setResellerSellRate } from "@/lib/reseller/pricing";
 import { upsertOwnBranding } from "@/lib/reseller/branding";
 import { createStarterKitShare } from "@/lib/reseller/starterKit";
+import { logAuditEventTx } from "@/lib/audit/log";
 
 /**
  * These are plain `<form action={...}>` server actions (no client-side
@@ -19,10 +20,28 @@ import { createStarterKitShare } from "@/lib/reseller/starterKit";
  * db/migrations/013_phase8_reseller_hierarchy.sql).
  */
 
+/**
+ * Phase 10: these actions previously checked only `session.orgRole`
+ * ("is this org a reseller at all"), never `session.role` ("is THIS
+ * member of the reseller org allowed to change money-affecting settings
+ * for it"). A `viewer`-role member of a reseller org could set the
+ * reseller's own sell price or rebrand its white-label subdomain before
+ * this fix — `requireRole` closes that. Pricing/branding are gated at
+ * `admin` (changes the reseller's economics/customer-facing identity);
+ * the starter-kit share (sales collateral, no lasting side effect beyond
+ * one row a prospect can view) is gated at the lower `agent_manager` bar,
+ * matching who'd realistically be running sales conversations.
+ */
 export async function updateSellRateAction(formData: FormData): Promise<void> {
   const session = await getSession();
   if (!session || session.orgRole !== "reseller") {
     redirect("/dashboard");
+  }
+  try {
+    requireRole(session, "admin");
+  } catch (err) {
+    if (err instanceof InsufficientRoleError) redirect("/dashboard/reseller/pricing?error=insufficient_role");
+    throw err;
   }
   const rate = Number(formData.get("sellPricePerMinuteUsd"));
   if (!Number.isFinite(rate) || rate < 0) {
@@ -30,6 +49,13 @@ export async function updateSellRateAction(formData: FormData): Promise<void> {
   }
   await withTenant(session.orgId, session.userId, async (client) => {
     await setResellerSellRate(client, session.orgId, rate);
+    await logAuditEventTx(client, {
+      orgId: session.orgId,
+      actorUserId: session.userId,
+      action: "reseller.sell_rate_updated",
+      targetType: "reseller_sell_rates",
+      metadata: { sellPricePerMinuteUsd: rate },
+    });
   });
   revalidatePath("/dashboard/reseller/pricing");
   revalidatePath("/dashboard/reseller/margin");
@@ -41,15 +67,29 @@ export async function updateBrandingAction(formData: FormData): Promise<void> {
   if (!session || session.orgRole !== "reseller") {
     redirect("/dashboard");
   }
+  try {
+    requireRole(session, "admin");
+  } catch (err) {
+    if (err instanceof InsufficientRoleError) redirect("/dashboard/reseller/pricing?error=insufficient_role");
+    throw err;
+  }
+  const brandingUpdate = {
+    companyName: (formData.get("companyName") as string) || undefined,
+    logoUrl: (formData.get("logoUrl") as string) || undefined,
+    primaryColor: (formData.get("primaryColor") as string) || undefined,
+    secondaryColor: (formData.get("secondaryColor") as string) || undefined,
+    subdomain: (formData.get("subdomain") as string)?.toLowerCase() || undefined,
+    supportEmail: (formData.get("supportEmail") as string) || undefined,
+    supportPhone: (formData.get("supportPhone") as string) || undefined,
+  };
   await withTenant(session.orgId, session.userId, async (client) => {
-    await upsertOwnBranding(client, session.orgId, {
-      companyName: (formData.get("companyName") as string) || undefined,
-      logoUrl: (formData.get("logoUrl") as string) || undefined,
-      primaryColor: (formData.get("primaryColor") as string) || undefined,
-      secondaryColor: (formData.get("secondaryColor") as string) || undefined,
-      subdomain: (formData.get("subdomain") as string)?.toLowerCase() || undefined,
-      supportEmail: (formData.get("supportEmail") as string) || undefined,
-      supportPhone: (formData.get("supportPhone") as string) || undefined,
+    await upsertOwnBranding(client, session.orgId, brandingUpdate);
+    await logAuditEventTx(client, {
+      orgId: session.orgId,
+      actorUserId: session.userId,
+      action: "reseller.branding_updated",
+      targetType: "reseller_branding",
+      metadata: brandingUpdate,
     });
   });
   revalidatePath("/dashboard/reseller/pricing");
@@ -60,6 +100,12 @@ export async function createStarterKitShareAction(formData: FormData): Promise<v
   const session = await getSession();
   if (!session || session.orgRole !== "reseller") {
     redirect("/dashboard");
+  }
+  try {
+    requireRole(session, "agent_manager");
+  } catch (err) {
+    if (err instanceof InsufficientRoleError) redirect("/dashboard/reseller/starter-kit?error=insufficient_role");
+    throw err;
   }
   const estimatedMinutes = Number(formData.get("estimatedMinutesPerMonth"));
   if (!Number.isFinite(estimatedMinutes) || estimatedMinutes <= 0) {

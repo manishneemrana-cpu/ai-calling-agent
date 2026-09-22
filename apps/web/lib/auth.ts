@@ -119,6 +119,56 @@ export async function destroySessionCookie(): Promise<void> {
   cookieStore.delete(SESSION_COOKIE);
 }
 
+/**
+ * Phase 10 security hardening: within-org RBAC.
+ *
+ * `users.role` (owner | admin | agent_manager | viewer,
+ * db/migrations/002_organizations_users_sessions.sql) has existed since
+ * Phase 1 and is carried on every `SessionInfo`, but until this phase it was
+ * only ever *displayed* (`app/dashboard/page.tsx`: "Your role: {session.role}")
+ * — no sensitive route or server action actually checked it. Every
+ * authorization decision in this codebase before Phase 10 was either (a)
+ * "any authenticated member of this org" or (b) an `orgRole` check
+ * (platform/reseller/customer, the Phase 8 cross-org hierarchy). Those are
+ * orthogonal: `orgRole` answers "what kind of org is this", `role` answers
+ * "what can this specific member of the org do". A `viewer` in a reseller
+ * org could previously change that reseller's sell price or top up the
+ * org's wallet — this closes that gap.
+ *
+ * This is an application-level check, not a new RLS boundary (RLS remains
+ * the hard tenant-isolation boundary; role is a same-tenant permission
+ * question RLS's `org_id` scoping cannot express) — same "UX convenience,
+ * not the security boundary" caveat every `orgRole` check in this codebase
+ * already carries (see `app/dashboard/reseller/actions.ts`).
+ */
+export const ROLE_RANK: Record<SessionInfo["role"], number> = {
+  viewer: 0,
+  agent_manager: 1,
+  admin: 2,
+  owner: 3,
+};
+
+export class InsufficientRoleError extends Error {
+  constructor(required: SessionInfo["role"]) {
+    super(`This action requires the '${required}' role or higher`);
+    this.name = "InsufficientRoleError";
+  }
+}
+
+/** Throws InsufficientRoleError if session.role is below `minRole`. Call
+ * this at the top of any server action / route handler that mutates
+ * something more sensitive than the caller's own org membership (billing,
+ * reseller pricing/branding, provider credentials, agent config). */
+export function requireRole(session: SessionInfo, minRole: SessionInfo["role"]): void {
+  if (ROLE_RANK[session.role] < ROLE_RANK[minRole]) {
+    throw new InsufficientRoleError(minRole);
+  }
+}
+
+export function hasRole(session: SessionInfo, minRole: SessionInfo["role"]): boolean {
+  return ROLE_RANK[session.role] >= ROLE_RANK[minRole];
+}
+
 export function slugify(input: string): string {
   const base = input
     .toLowerCase()

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/auth";
+import { getSession, requireRole, InsufficientRoleError } from "@/lib/auth";
 import { createWalletTopupOrder } from "@/lib/billing/paymentOrders";
 
 /**
@@ -21,6 +21,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Phase 10: initiating a real-money payment order is a billing action —
+  // gate it at `admin`+ same as the reseller pricing/branding actions,
+  // rather than "any authenticated org member" as before this phase.
+  try {
+    requireRole(session, "admin");
+  } catch (err) {
+    if (err instanceof InsufficientRoleError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    throw err;
   }
 
   const json = await req.json().catch(() => null);

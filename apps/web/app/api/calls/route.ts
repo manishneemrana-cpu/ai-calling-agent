@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/auth";
+import { getSession, requireRole, InsufficientRoleError } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
 import {
   createOutboundCall,
@@ -41,6 +41,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Phase 10: placing a real outbound call spends wallet balance and dials
+  // a real phone number — a `viewer` should be able to see calls (GET
+  // below stays open to any org member) but not place one.
+  try {
+    requireRole(session, "agent_manager");
+  } catch (err) {
+    if (err instanceof InsufficientRoleError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    throw err;
   }
 
   const json = await req.json().catch(() => null);
