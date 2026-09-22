@@ -58,7 +58,7 @@ type TenantProviderConfigRow = {
 export async function getTelephonyProvider(
   orgId: string,
   userId: string | null,
-  opts: { providerKey?: string } = {}
+  opts: { providerKey?: string; client?: PoolClient } = {}
 ): Promise<TelephonyProvider> {
   return getProvider<TelephonyProvider>("telephony", orgId, userId, opts);
 }
@@ -83,9 +83,9 @@ export async function getProvider<T>(
   layer: Layer,
   orgId: string,
   userId: string | null,
-  opts: { providerKey?: string } = {}
+  opts: { providerKey?: string; client?: PoolClient } = {}
 ): Promise<T> {
-  return withTenant(orgId, userId, async (client) => {
+  const resolve = async (client: PoolClient): Promise<T> => {
     const row = await loadTenantProviderConfig(client, orgId, layer, opts.providerKey);
     if (!row) {
       throw new ProviderNotConfiguredError(orgId, layer);
@@ -96,7 +96,26 @@ export async function getProvider<T>(
     }
     const config = decryptConfigIfNeeded(row.config);
     return factory(config) as T;
-  });
+  };
+
+  // Phase 9 concurrency fix: when the caller is ALREADY inside a
+  // withTenant() transaction (e.g. createOutboundCall — see
+  // lib/calls/createCall.ts), reuse that same PoolClient instead of
+  // opening a second, nested `withTenant()` (a second `pool.connect()`).
+  // Under concurrent load equal to or above the pool's `max` size, every
+  // in-flight outer transaction holding a connection while ALSO waiting
+  // on a second (inner) connection from the SAME exhausted pool is a
+  // connection-pool deadlock — none of them can ever get their second
+  // connection because none of them ever release their first. This was
+  // found for real by the Phase 9 load test (docs/LOAD_TESTING.md) at
+  // concurrency >= the pool's default max (10): every request hung
+  // until the test timed out. Passing `opts.client` through is the fix;
+  // every existing call site that doesn't pass one keeps opening its own
+  // `withTenant()` exactly as before, so this is purely additive.
+  if (opts.client) {
+    return resolve(opts.client);
+  }
+  return withTenant(orgId, userId, resolve);
 }
 
 async function loadTenantProviderConfig(

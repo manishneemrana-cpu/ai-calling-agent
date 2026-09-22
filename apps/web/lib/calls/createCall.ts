@@ -58,8 +58,15 @@ export async function createOutboundCall(params: CreateOutboundCallParams): Prom
     // tenant with balance <= 0 — same "no provider contacted" guarantee.
     await assertWalletHasBalance(client, params.orgId);
 
-    // 2) Only now does the telephony provider get resolved/invoked.
-    const provider = await getTelephonyProvider(params.orgId, params.userId, { providerKey: params.providerKey });
+    // 2) Only now does the telephony provider get resolved/invoked. Reuses
+    // THIS transaction's own client (Phase 9 concurrency fix — see
+    // registry.ts's getProvider doc comment) instead of opening a second,
+    // nested connection from the pool, which deadlocks under concurrent
+    // load >= the pool's max size.
+    const provider = await getTelephonyProvider(params.orgId, params.userId, {
+      providerKey: params.providerKey,
+      client,
+    });
     const providerResult = await provider.createCall({
       toNumber: params.toNumber,
       fromNumber: params.fromNumber,

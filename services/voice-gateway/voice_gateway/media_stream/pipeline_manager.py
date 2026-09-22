@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 
 from ..llm.types import LLMProvider, ToolDefinition
 from ..orchestrator.pipeline import ConversationOrchestrator, ToolDispatcher
-from ..registry import get_provider
+from ..registry import get_provider_with_key
 from ..stt.types import STTProvider
 from ..tts.types import TTSProvider, VoiceProfile
 
@@ -50,6 +50,9 @@ class _PipelineSession:
     stt: STTProvider
     llm: LLMProvider
     tts: TTSProvider
+    stt_provider_key: str | None = None
+    llm_provider_key: str | None = None
+    tts_provider_key: str | None = None
     voice_profile: VoiceProfile = field(default_factory=VoiceProfile)
     tools: list[ToolDefinition] = field(default_factory=list)
     tool_dispatcher: ToolDispatcher | None = None
@@ -74,15 +77,18 @@ class PipelineManager:
         shared Provider Registry — see docs/PROVIDER_REGISTRY.md) and stashes
         them against `call_id`, ready for `get_orchestrator()` once the
         provider's media WebSocket connects."""
-        stt = await get_provider("stt", org_id, user_id)
-        llm = await get_provider("llm", org_id, user_id)
-        tts = await get_provider("tts", org_id, user_id)
+        stt, stt_provider_key = await get_provider_with_key("stt", org_id, user_id)
+        llm, llm_provider_key = await get_provider_with_key("llm", org_id, user_id)
+        tts, tts_provider_key = await get_provider_with_key("tts", org_id, user_id)
         self.start_pipeline_with_providers(
             call_id,
             org_id,
             stt=stt,
             llm=llm,
             tts=tts,
+            stt_provider_key=stt_provider_key,
+            llm_provider_key=llm_provider_key,
+            tts_provider_key=tts_provider_key,
             user_id=user_id,
             voice_profile=voice_profile,
             tools=tools,
@@ -97,6 +103,9 @@ class PipelineManager:
         stt: STTProvider,
         llm: LLMProvider,
         tts: TTSProvider,
+        stt_provider_key: str | None = None,
+        llm_provider_key: str | None = None,
+        tts_provider_key: str | None = None,
         user_id: str | None = None,
         voice_profile: VoiceProfile | None = None,
         tools: list[ToolDefinition] | None = None,
@@ -108,13 +117,24 @@ class PipelineManager:
         `PipelineManager`/`server.py` against `MockSTT`/`MockLLM`/`MockTTS`
         without a live Postgres connection, exactly like every other
         adapter's dependency-injected test in this codebase (see
-        `tests/fakes.py`)."""
+        `tests/fakes.py`). `*_provider_key` default to None — deliberately
+        NOT inferred from each provider's own `.provider_key` attribute,
+        because doing so would make every existing direct-injection test
+        (which typically passes a fake, non-UUID `org_id` like "org-1")
+        start attempting REAL `call_latency_metrics` writes it never opted
+        into and never expects (see ConversationOrchestrator: a turn only
+        writes latency rows when BOTH org_id and that stage's provider_key
+        are non-None). Only `start_pipeline()`'s real registry-backed path
+        passes both explicitly."""
         self._sessions[call_id] = _PipelineSession(
             org_id=org_id,
             user_id=user_id,
             stt=stt,
             llm=llm,
             tts=tts,
+            stt_provider_key=stt_provider_key,
+            llm_provider_key=llm_provider_key,
+            tts_provider_key=tts_provider_key,
             voice_profile=voice_profile or VoiceProfile(),
             tools=tools or [],
             tool_dispatcher=tool_dispatcher,
@@ -136,6 +156,10 @@ class PipelineManager:
                 voice_profile=session.voice_profile,
                 tool_dispatcher=session.tool_dispatcher,
                 tools=session.tools,
+                org_id=session.org_id,
+                stt_provider_key=session.stt_provider_key,
+                llm_provider_key=session.llm_provider_key,
+                tts_provider_key=session.tts_provider_key,
             )
         return session.orchestrator
 

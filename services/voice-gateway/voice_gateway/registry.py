@@ -65,8 +65,23 @@ async def get_provider(
     telephony) provider. Never `from .stt.adapters.sarvam import
     SarvamSTTProvider` directly in orchestrator/business-logic code, and
     never branch on provider_key — see docs/PROVIDER_REGISTRY.md."""
+    provider, _key = await get_provider_with_key(layer, org_id, user_id, provider_key=provider_key)
+    return provider
 
-    async def _resolve(conn: asyncpg.Connection) -> Any:
+
+async def get_provider_with_key(
+    layer: Layer,
+    org_id: str,
+    user_id: str | None,
+    *,
+    provider_key: str | None = None,
+) -> tuple[Any, str]:
+    """Same resolution as `get_provider`, but also returns the resolved
+    `provider_key` string (Phase 9: needed by the orchestrator to attribute
+    a latency measurement or a failover event to the ACTUAL provider that
+    was selected, not just "whatever the tenant's default is")."""
+
+    async def _resolve(conn: asyncpg.Connection) -> tuple[Any, str]:
         row = await _load_tenant_provider_config(conn, org_id, layer, provider_key)
         if row is None:
             raise ProviderNotConfiguredError(org_id, layer)
@@ -74,9 +89,31 @@ async def get_provider(
         if factory is None:
             raise ProviderNotRegisteredError(row["adapter_class_identifier"])
         config = _decrypt_config_if_needed(row["config"])
-        return factory(config)
+        return factory(config), row["provider_key"]
 
     return await with_tenant(org_id, user_id, _resolve)
+
+
+async def list_ranked_provider_configs(
+    conn: asyncpg.Connection, org_id: str, layer: str
+) -> list[asyncpg.Record]:
+    """Phase 9 failover: every provider configured for (org_id, layer), in
+    the SAME priority order `get_provider` already uses for its single
+    pick (is_default DESC, priority ASC) — this is the ranked-provider-list
+    support the Phase 9 spec asked to "verify" already exists (it does,
+    since Phase 2 — see 007_provider_registry.sql's `priority` column) and
+    reuse rather than duplicate."""
+    return await conn.fetch(
+        """
+        SELECT tpc.provider_key, tpc.config, p.adapter_class_identifier
+          FROM tenant_provider_config tpc
+          JOIN providers p ON p.layer = tpc.layer AND p.provider_key = tpc.provider_key
+         WHERE tpc.org_id = $1 AND tpc.layer = $2
+         ORDER BY tpc.is_default DESC, tpc.priority ASC
+        """,
+        org_id,
+        layer,
+    )
 
 
 async def _load_tenant_provider_config(

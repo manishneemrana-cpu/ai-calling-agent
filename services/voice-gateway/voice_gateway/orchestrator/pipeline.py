@@ -24,6 +24,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 
+from ..billing.latency_writer import write_latency_metric
 from ..knowledge.grounding import build_grounded_system_prompt
 from ..knowledge.retrieval import RetrievedChunk
 from ..latency import TurnLatencyTracker
@@ -52,6 +53,10 @@ class ConversationOrchestrator:
         silence_monitor: SilenceMonitor | None = None,
         base_persona_prompt: str | None = None,
         knowledge_retriever: KnowledgeRetriever | None = None,
+        org_id: str | None = None,
+        stt_provider_key: str | None = None,
+        llm_provider_key: str | None = None,
+        tts_provider_key: str | None = None,
     ):
         self.call_id = call_id
         self.stt = stt
@@ -63,6 +68,18 @@ class ConversationOrchestrator:
         self.barge_in = barge_in or BargeInController()
         self.silence_monitor = silence_monitor or SilenceMonitor()
         self.messages: list[Message] = []
+        # Phase 9: closes the Phase 7 "deferred wiring" gap — when the
+        # caller knows this turn's org_id and which provider was actually
+        # resolved for each layer (PipelineManager does, via
+        # registry.get_provider_with_key), run_turn() below persists each
+        # stage's REAL measured duration into `call_latency_metrics`
+        # (billing/latency_writer.py), not just a structured log line.
+        # Left None (the default) for every pre-Phase-9 caller/test — those
+        # behave exactly as before, no rows written, no behavior change.
+        self.org_id = org_id
+        self.stt_provider_key = stt_provider_key
+        self.llm_provider_key = llm_provider_key
+        self.tts_provider_key = tts_provider_key
         # Optional RAG/guardrail grounding step (Phase 3.5 Part C — see
         # voice_gateway/knowledge/grounding.py). Both must be provided
         # together for grounding to apply; a call with neither (e.g. every
@@ -103,7 +120,30 @@ class ConversationOrchestrator:
         async for audio_chunk in self._reply_and_speak(tracker, first_token_marked):
             yield audio_chunk
 
-        tracker.finish()
+        result = tracker.finish()
+        await self._persist_latency(result)
+
+    async def _persist_latency(self, result) -> None:
+        """Phase 9: writes each measured stage of this turn into
+        `call_latency_metrics` for real (see billing/latency_writer.py and
+        the constructor docstring above) — the actual call site Phase 7
+        deliberately left as a documented follow-up."""
+        stages: list[tuple[float | None, str, str | None]] = [
+            (result.end_of_speech_to_transcript_s, "end_of_speech_to_transcript", self.stt_provider_key),
+            (result.transcript_to_llm_first_token_s, "transcript_to_llm_first_token", self.llm_provider_key),
+            (
+                result.llm_first_token_to_first_tts_byte_s,
+                "llm_first_token_to_first_tts_byte",
+                self.tts_provider_key,
+            ),
+        ]
+        for duration_s, stage, provider_key in stages:
+            if duration_s is None or provider_key is None:
+                continue
+            layer = {"end_of_speech_to_transcript": "stt", "transcript_to_llm_first_token": "llm"}.get(
+                stage, "tts"
+            )
+            await write_latency_metric(self.org_id, self.call_id, layer, provider_key, stage, duration_s)
 
     async def _apply_grounding(self, user_text: str) -> None:
         """Retrieves this call's tenant knowledge base for `user_text` and

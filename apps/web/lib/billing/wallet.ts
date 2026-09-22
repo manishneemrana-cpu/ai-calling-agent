@@ -35,9 +35,26 @@ export type WalletState = {
   lowBalanceThreshold: number;
 };
 
-export async function getOrCreateWallet(client: PoolClient, orgId: string): Promise<WalletState> {
+export async function getOrCreateWallet(
+  client: PoolClient,
+  orgId: string,
+  opts: { forUpdate?: boolean } = {}
+): Promise<WalletState> {
+  // Phase 9 concurrency fix: `FOR UPDATE` row-locks the wallet row for the
+  // duration of the enclosing transaction, so two concurrent
+  // applyWalletTransaction() calls for the SAME org can no longer both read
+  // the same starting balance and race to write a stale one (a classic
+  // lost-update bug under concurrent load — see
+  // apps/web/tests/billing/wallet-concurrency.test.ts, which reproduces it
+  // without this lock and proves it's gone with it). The second
+  // transaction simply blocks here until the first commits, then reads the
+  // now-updated balance — exactly the serialization a debit ledger needs.
+  // Read-only callers (none currently outside this module) can omit
+  // `forUpdate` to avoid taking the lock unnecessarily.
   const existing = await client.query(
-    `SELECT id, balance, currency, low_balance_threshold FROM wallets WHERE org_id = $1`,
+    `SELECT id, balance, currency, low_balance_threshold FROM wallets WHERE org_id = $1${
+      opts.forUpdate ? " FOR UPDATE" : ""
+    }`,
     [orgId]
   );
   if (existing.rows[0]) {
@@ -79,7 +96,7 @@ export async function applyWalletTransaction(
   params: ApplyWalletTransactionParams
 ): Promise<{ walletId: string; balanceAfter: number; alertTriggered: "low_balance" | "zero_balance" | null }> {
   return withTenant(params.orgId, null, async (client) => {
-    const wallet = await getOrCreateWallet(client, params.orgId);
+    const wallet = await getOrCreateWallet(client, params.orgId, { forUpdate: true });
     const delta = params.type === "credit" ? params.amount : -params.amount;
     const balanceAfter = wallet.balance + delta;
 
