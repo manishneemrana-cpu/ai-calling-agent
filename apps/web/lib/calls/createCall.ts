@@ -2,9 +2,10 @@ import { randomUUID } from "crypto";
 import { withTenant } from "../db/tenant";
 import { getTelephonyProvider, ProviderNotConfiguredError } from "../providers/registry";
 import { assertCallIsCompliant, ComplianceBlockedError } from "../compliance/gate";
+import { assertWalletHasBalance, ZeroBalanceBlockedError } from "../billing/callGuard";
 import type { CreateCallResult } from "../providers/telephony/types";
 
-export { ComplianceBlockedError, ProviderNotConfiguredError };
+export { ComplianceBlockedError, ProviderNotConfiguredError, ZeroBalanceBlockedError };
 
 export type CreateOutboundCallParams = {
   orgId: string;
@@ -29,12 +30,14 @@ export type CreateOutboundCallOutcome = {
  * job — see lib/campaigns/dialer.ts) calls this and nothing else; there is
  * no lower-level "place a call" helper that skips the gate.
  *
- * The compliance gate (lib/compliance/gate.ts) runs FIRST, inside the same
+ * The compliance gate (lib/compliance/gate.ts) and the Phase 7 wallet-
+ * balance gate (lib/billing/callGuard.ts) both run FIRST, inside the same
  * withTenant() transaction, before the telephony provider is even
  * resolved — a caller cannot construct a call by going around this
  * function, and this function cannot construct a call without first
- * passing the gate. See apps/web/tests/compliance/gate.test.ts for the
- * "every known call-creation path is blocked" proof.
+ * passing both gates. See apps/web/tests/compliance/gate.test.ts and
+ * apps/web/tests/billing/zero-balance-blocking.test.ts for the "every
+ * known call-creation path is blocked" proofs.
  */
 export async function createOutboundCall(params: CreateOutboundCallParams): Promise<CreateOutboundCallOutcome> {
   const appCallId = randomUUID();
@@ -49,6 +52,11 @@ export async function createOutboundCall(params: CreateOutboundCallParams): Prom
       toNumber: params.toNumber,
       campaignId: params.campaignId ?? null,
     });
+
+    // 1b) MANDATORY zero-balance gate (Phase 7). Throws
+    // ZeroBalanceBlockedError and stops here for a prepaid_wallet/hybrid
+    // tenant with balance <= 0 — same "no provider contacted" guarantee.
+    await assertWalletHasBalance(client, params.orgId);
 
     // 2) Only now does the telephony provider get resolved/invoked.
     const provider = await getTelephonyProvider(params.orgId, params.userId, { providerKey: params.providerKey });

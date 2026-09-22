@@ -73,3 +73,37 @@ Per-tenant (and per-reseller white-label) configuration selects which concrete a
 - Pipecat's frame-processor pipeline model gives fine-grained control over barge-in behavior and per-stage provider swapping — matching the adapter-interface requirement more naturally than LiveKit Agents, which is architected around LiveKit's own WebRTC server.
 - Python-first, open-source (no vendor lock to a hosted media server), consistent with running this as a separate Python service (see ARCHITECTURE.md).
 - LiveKit Agents remains the documented alternate for a future point where the platform needs LiveKit's own SIP-trunking/WebRTC infrastructure at a much larger concurrent-call scale than Phase 1 targets.
+
+## Payment gateway (Phase 7, added 2026-09-22)
+
+| Layer | Primary | Alternate | Reasoning |
+|---|---|---|---|
+| Payment gateway | **Razorpay** | **Cashfree** | See `VERIFICATION.md` §11 for full research. Razorpay's developer-friendly Payment Links/Subscriptions APIs and webhook-signature-verification flow are the better fit for this platform's wallet-top-up + future subscription billing than Cashfree's stronger-but-differently-focused instant-payouts product. Cashfree is cataloged (`beta`) as the cost-optimization fallback (~1.75-1.95% vs ~2% published TDR) once real volume justifies a quote comparison. |
+
+Same adapter-interface principle as every other layer: business logic
+depends only on `PaymentGatewayProvider`
+(`apps/web/lib/providers/payment_gateway/types.ts`), resolved via the same
+DB-driven Provider Registry (`tenant_provider_config` with
+`layer='payment_gateway'`). The Mock adapter is fully implemented for
+tests/demo mode; the Razorpay adapter is a real REST API implementation
+structured for dependency-injected `fetch`, unit-tested against a mocked
+HTTP client and a hand-computed HMAC signature (no live keys needed —
+`apps/web/tests/billing/razorpay-adapter.test.ts`). Cashfree is cataloged
+in the `providers` table but has no adapter class yet — a documented
+follow-up, not a Phase 7 blocker.
+
+Wallet-credit idempotency: a webhook redelivery must not double-credit a
+tenant's wallet. This is enforced the same way Phase 2 enforced telephony-
+webhook idempotency — a SECURITY DEFINER SQL function
+(`credit_wallet_from_payment`, `db/migrations/012_phase7_billing.sql`)
+that atomically records the delivery in `payment_webhook_events`
+(`UNIQUE(gateway_provider_key, idempotency_key)`) and credits the wallet
+in the same transaction only on the first delivery. Proven by
+`apps/web/tests/billing/payment-webhook-idempotency.test.ts`.
+
+### Phase 8 extension point (documented, not implemented)
+
+`billing_accounts.reseller_id` (nullable, currently unused by any Phase 7
+code path) is where Phase 8's reseller/white-label hierarchy will route a
+tenant's billing through a reseller markup, without a schema rewrite —
+see `db/migrations/012_phase7_billing.sql`'s column comment.

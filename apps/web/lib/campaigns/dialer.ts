@@ -1,5 +1,10 @@
 import { withTenant } from "../db/tenant";
-import { createOutboundCall, ComplianceBlockedError, ProviderNotConfiguredError } from "../calls/createCall";
+import {
+  createOutboundCall,
+  ComplianceBlockedError,
+  ProviderNotConfiguredError,
+  ZeroBalanceBlockedError,
+} from "../calls/createCall";
 import { getJobQueue } from "../queue";
 
 /**
@@ -114,6 +119,15 @@ export async function processCampaignDialJob(job: CampaignDialJob): Promise<void
     if (err instanceof ComplianceBlockedError) {
       await markCampaignLeadOutcome(job, "blocked", err.message);
       return; // compliance blocks are terminal for this lead, never retried
+    }
+    if (err instanceof ZeroBalanceBlockedError) {
+      // Phase 7: same "never retried, never places a call" treatment as a
+      // compliance block — a zero-balance tenant does not get its
+      // campaign lead silently retried until money appears; a low-balance
+      // alert (already inserted by the wallet gate) is the intended path
+      // back to dialing, not blind retries.
+      await markCampaignLeadOutcome(job, "blocked", err.message);
+      return;
     }
     if (err instanceof ProviderNotConfiguredError) {
       throw err; // a config problem — let the queue's own retry/backoff handle it

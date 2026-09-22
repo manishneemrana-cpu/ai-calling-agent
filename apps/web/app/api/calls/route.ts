@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { withTenant } from "@/lib/db/tenant";
-import { createOutboundCall, ComplianceBlockedError, ProviderNotConfiguredError } from "@/lib/calls/createCall";
+import {
+  createOutboundCall,
+  ComplianceBlockedError,
+  ProviderNotConfiguredError,
+  ZeroBalanceBlockedError,
+} from "@/lib/calls/createCall";
 
 /**
  * POST /api/calls — places an outbound call using this tenant's configured
@@ -60,6 +65,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (err) {
     if (err instanceof ComplianceBlockedError) {
       return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    if (err instanceof ZeroBalanceBlockedError) {
+      return NextResponse.json({ error: err.message }, { status: 402 });
     }
     if (err instanceof ProviderNotConfiguredError) {
       return NextResponse.json({ error: err.message }, { status: 422 });

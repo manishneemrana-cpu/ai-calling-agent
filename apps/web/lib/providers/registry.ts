@@ -4,6 +4,7 @@ import { decryptProviderConfig, isEncryptedConfig } from "./crypto";
 import { resolveAdapterFactory } from "./adapter-map";
 import type { TelephonyProvider } from "./telephony/types";
 import type { WhatsAppProvider } from "./whatsapp/types";
+import type { PaymentGatewayProvider } from "./payment_gateway/types";
 
 // Import every built-in adapter module once, for its side-effecting
 // registerAdapter() call. This file is the ONLY place that needs to know
@@ -17,8 +18,10 @@ import "./telephony/adapters/plivo";
 import "./telephony/adapters/frejun-teler";
 import "./whatsapp/adapters/mock";
 import "./whatsapp/adapters/interakt";
+import "./payment_gateway/adapters/mock";
+import "./payment_gateway/adapters/razorpay";
 
-export type Layer = "telephony" | "stt" | "tts" | "llm" | "whatsapp";
+export type Layer = "telephony" | "stt" | "tts" | "llm" | "whatsapp" | "payment_gateway";
 
 export class ProviderNotConfiguredError extends Error {
   constructor(orgId: string, layer: Layer) {
@@ -66,6 +69,14 @@ export async function getWhatsAppProvider(
   opts: { providerKey?: string } = {}
 ): Promise<WhatsAppProvider> {
   return getProvider<WhatsAppProvider>("whatsapp", orgId, userId, opts);
+}
+
+export async function getPaymentGatewayProvider(
+  orgId: string,
+  userId: string | null,
+  opts: { providerKey?: string } = {}
+): Promise<PaymentGatewayProvider> {
+  return getProvider<PaymentGatewayProvider>("payment_gateway", orgId, userId, opts);
 }
 
 export async function getProvider<T>(

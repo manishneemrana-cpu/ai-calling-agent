@@ -396,3 +396,44 @@ myoperator.com/blog/whatsapp-business-api-pricing-india-2026;
 m.aisensy.com/blog/whatsapp-api-providers; codingclave.com/guides/whatsapp-api-pricing-india-2026-comparison;
 codingclave.com/blog/gupshup-whatsapp-pricing-india-2026; wati.io/en/blog/whatsapp-api-prerequisites;
 go4whatsup.com/guides/get-whatsapp-business-api.
+
+## 11. Payment gateway (Phase 7, 2026-09-22) — Razorpay vs Cashfree for wallet top-up + subscription billing
+
+### 11.1 Pricing (search-indexed, not a sales quote — re-verify before go-live)
+
+| Gateway | Published TDR | Settlement | Notes |
+|---|---|---|---|
+| **Razorpay** | ~2% + GST | T+2 (instant available at extra cost) | Developer-friendly APIs, mature Payment Links + Subscriptions products, highest UPI success rate cited (~93%), broad developer ecosystem. |
+| **Cashfree** | ~1.75-1.95% + GST | T+2 (instant at +0.25%) | Slightly lower published TDR; industry-standard "Payouts" product for instant disbursal (UPI/wallet/bank) — a strength for marketplaces/gig platforms more than a recurring-billing SaaS. |
+
+### 11.2 Feature fit for this platform
+
+Both support UPI intent/collect/QR/AutoPay (needed for subscription
+mandates), cards, netbanking, wallets, Payment Links, and webhook-based
+payment confirmation with HMAC signature verification. Razorpay is the
+more commonly recommended gateway specifically for **subscription-style
+SaaS billing** in India, per multiple 2026 comparisons; Cashfree's
+differentiator (fast/flexible payouts) is not this platform's Phase 7
+need (crediting our OWN wallet ledger from a customer's incoming payment,
+not disbursing money out).
+
+### 11.3 Verdict
+
+**Primary: Razorpay** — the better fit for this platform's
+subscription/wallet/pay-as-you-go billing mix, most commonly recommended
+gateway for an India SaaS selling recurring billing, and a webhook-
+signature-verification flow (`X-Razorpay-Signature` HMAC-SHA256) that
+maps directly onto this phase's idempotent-wallet-credit requirement (see
+`db/migrations/012_phase7_billing.sql`'s `credit_wallet_from_payment`).
+**Alternate: Cashfree** — kept `beta` in the `providers` catalog
+(`layer='payment_gateway'`) as the cost-optimization fallback once volume
+justifies a real quote comparison; its stronger payouts product is a
+better fit for a future disbursal need than for Phase 7's own wallet
+top-up flow. Both adapters follow the same Provider Registry pattern as
+every other layer — switching primary/alternate is a config change, not a
+code change; only Razorpay has a real (mocked-HTTP-tested) adapter
+implemented in Phase 7, Cashfree is cataloged but not yet implemented.
+
+Sources: surecart.com/blog/razorpay-vs-cashfree-vs-payu-wordpress-india;
+analyticsinsight.net/finance/razorpay-vs-payu-vs-cashfree-which-is-the-best-payment-gateway-for-2026;
+hodmedia.in/blog/razorpay-vs-cashfree-india; productgrowth.in/tools/compare/razorpay-vs-cashfree-vs-stripe.
