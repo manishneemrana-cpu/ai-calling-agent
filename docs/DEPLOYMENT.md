@@ -155,7 +155,24 @@ provisioned anywhere in this repo:
 needs a schema or code change, only the infra steps above, per reseller,
 as each one onboards a real custom domain.
 
-## 7. Monitoring/observability (Phase 9 built the metrics; wire alerting here)
+## 7a. Same VPS as an existing, unrelated site (e.g. sitesnsign.com)
+
+Everything above assumes a from-scratch cloud deployment (Vercel/Fly.io/a
+fresh VPS). A common REAL scenario instead: deploying onto a VPS that
+**already** runs a different, unrelated production site/stack (its own
+Docker Compose project, its own Postgres container, its own Nginx), and
+this app needs to live alongside it at a new subdomain without touching
+anything about that existing site.
+
+See **`deploy/README.md`** for that full setup: a dedicated
+`docker-compose.prod.yml` (repo root) with this app's OWN Postgres
+container/volume/Docker network — never the existing site's database — an
+Nginx server-block config for the new subdomain (`deploy/nginx/`), and
+`deploy/RUNBOOK.md`'s literal deploy-day checklist, including how to
+debug/roll back this app's containers without ever needing to touch or
+restart the existing site's stack.
+
+## 7b. Monitoring/observability (Phase 9 built the metrics; wire alerting here)
 
 Phase 9 wired latency recording (`call_latency_metrics`) and provider
 failover tracking — see `docs/LOAD_TESTING.md`. This phase does not build

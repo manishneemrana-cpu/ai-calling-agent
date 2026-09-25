@@ -4,6 +4,7 @@ import { resolveAdapterFactory } from "@/lib/providers/adapter-map";
 import { WebhookSignatureError } from "@/lib/providers/telephony/types";
 import { decryptProviderConfig, isEncryptedConfig } from "@/lib/providers/crypto";
 import { notifyCallAnswered } from "@/lib/voice-gateway/client";
+import { enqueueOutboundWebhook } from "@/lib/webhooks/outboundWebhookSender";
 import "@/lib/providers/telephony/adapters/mock";
 import "@/lib/providers/telephony/adapters/plivo";
 import "@/lib/providers/telephony/adapters/frejun-teler";
@@ -122,6 +123,32 @@ export async function POST(
       orgId: result.org_id,
       providerKey,
     });
+  }
+
+  // Outbound "call finished" webhook (docs/SITESNSIGN_INTEGRATION.md's
+  // return-callback direction — generic per-tenant infra, not
+  // sitesnsign-specific). Fires once per call reaching a terminal status,
+  // guarded by the same `was_new` idempotency flag used above. A tenant
+  // with no `webhook_subscriptions` row for 'call.completed' pays for one
+  // cheap no-op SELECT; a delivery failure here must never fail this
+  // webhook's response to the telephony provider (same rationale as
+  // notifyCallAnswered() above), so errors are logged, not thrown.
+  const TERMINAL_STATUSES = new Set(["completed", "failed", "no_answer"]);
+  if (result.was_new && result.call_id && result.org_id && event.status && TERMINAL_STATUSES.has(event.status)) {
+    try {
+      await enqueueOutboundWebhook({
+        orgId: result.org_id,
+        eventType: "call.completed",
+        payload: {
+          callId: result.call_id,
+          providerKey,
+          status: event.status,
+          recordingUrl: event.recordingUrl ?? null,
+        },
+      });
+    } catch (err) {
+      console.error("enqueueOutboundWebhook failed for call.completed", err);
+    }
   }
 
   return NextResponse.json({ processed: result.was_new, callId: result.call_id }, { status: 200 });

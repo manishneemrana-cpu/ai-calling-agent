@@ -1,0 +1,144 @@
+# docker-compose.prod.yml — production compose file for deploying
+# ai-calling-agent onto an EXISTING VPS that already runs another,
+# unrelated Docker Compose stack (the founder's sitesnsign.com real-estate
+# site). See deploy/README.md and deploy/RUNBOOK.md for the full deploy-day
+# walkthrough; this file only defines the containers.
+#
+# Isolation from the existing sitesnsign.com stack (non-negotiable per the
+# deploy spec):
+#   - Its own Postgres container (`ai-calling-agent-postgres`, own volume)
+#     — NEVER the existing `sitesnsign-postgres-1` container/database.
+#   - Its own Docker network (`ai-calling-agent-net`) — not shared with
+#     sitesnsign.com's compose project, so there is no accidental
+#     cross-talk or port collision at the Docker network layer.
+#   - `web` and `voice-gateway` publish ports to `127.0.0.1` ONLY (never
+#     `0.0.0.0`) — reachable from Nginx running on the VPS host (per
+#     deploy/nginx/ai.sitesnsign.com.conf), never from the internet or from
+#     the sitesnsign.com stack directly.
+#
+# Usage (see deploy/RUNBOOK.md for the full sequence):
+#   cp .env.example .env   # then fill in real values
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml run --rm migrate
+
+name: ai-calling-agent
+
+networks:
+  ai-calling-agent-net:
+    name: ai-calling-agent-net
+    driver: bridge
+
+volumes:
+  ai-calling-agent-pgdata:
+    name: ai-calling-agent-pgdata
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-calling-agent-postgres
+    restart: unless-stopped
+    networks: [ai-calling-agent-net]
+    environment:
+      # Superuser used ONLY to create the DB + run migrations (which
+      # create the actual `app_user` role the app connects as — see
+      # db/migrations/001_extensions_and_core.sql). Set a REAL password in
+      # `.env`, never the dev default.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in .env}
+      POSTGRES_DB: ai_calling_agent
+    volumes:
+      - ai-calling-agent-pgdata:/var/lib/postgresql/data
+    # No `ports:` — not reachable from the VPS host or the internet at
+    # all, only from `web`/`voice-gateway`/`migrate` over
+    # ai-calling-agent-net. If you need a one-off psql session from the
+    # VPS host, use `docker compose exec postgres psql -U postgres` rather
+    # than publishing 5432.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional — only needed if `.env` sets QUEUE_BACKEND=bullmq. The
+  # documented default (apps/web/lib/queue/index.ts) is QUEUE_BACKEND=pg
+  # (no Redis at all). Uncomment this service AND the `web`/`voice-gateway`
+  # `depends_on: redis` lines below only if you've deliberately switched to
+  # BullMQ — see docs/DEPLOYMENT.md's "Redis" section for the trade-off.
+  #
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: ai-calling-agent-redis
+  #   restart: unless-stopped
+  #   networks: [ai-calling-agent-net]
+  #   volumes:
+  #     - ai-calling-agent-redisdata:/data
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: ai-calling-agent-web
+    restart: unless-stopped
+    networks: [ai-calling-agent-net]
+    env_file: .env
+    environment:
+      # Overrides whatever .env has for these two — inside this compose
+      # project, the app MUST reach Postgres/voice-gateway by their Docker
+      # service names, never `localhost` (that would resolve to the `web`
+      # container itself, not the `postgres` container).
+      DATABASE_URL: postgresql://app_user:${APP_DB_PASSWORD}@postgres:5432/ai_calling_agent
+      VOICE_GATEWAY_URL: http://voice-gateway:8100
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Bound to loopback ONLY (never 0.0.0.0) — reachable from Nginx running
+    # directly on the VPS host (deploy/nginx/ai.sitesnsign.com.conf's
+    # default assumption), but not from the internet or from the
+    # sitesnsign.com Docker network. If your Nginx instead runs as its own
+    # container joined to `ai-calling-agent-net`, delete this `ports:` line
+    # and use `expose: ["3000"]` + proxy to `http://web:3000` by service
+    # name instead (see that file's top comment, option (b)).
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  voice-gateway:
+    build:
+      context: services/voice-gateway
+      dockerfile: Dockerfile
+    container_name: ai-calling-agent-voice-gateway
+    restart: unless-stopped
+    networks: [ai-calling-agent-net]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://app_user:${APP_DB_PASSWORD}@postgres:5432/ai_calling_agent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Loopback-only, same rationale as `web` above (see
+    # services/voice-gateway/Dockerfile's comment on the internal_api HTTP
+    # trigger vs. the not-yet-wired media-stream WebSocket route — this
+    # port matters once that route ships).
+    ports:
+      - "127.0.0.1:8100:8100"
+
+  # One-shot migration runner — NOT started by `up -d` (no restart policy,
+  # exits after running). Invoke explicitly:
+  #   docker compose -f docker-compose.prod.yml run --rm migrate
+  # Safe to re-run: db/migrate.js tracks applied migrations in
+  # `_migrations` and skips ones already applied.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: builder # the builder stage still has db/ + node_modules + npm; the slim runner stage does not
+    container_name: ai-calling-agent-migrate
+    networks: [ai-calling-agent-net]
+    env_file: .env
+    environment:
+      DATABASE_URL_MIGRATE: postgresql://postgres:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/ai_calling_agent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /repo
+    entrypoint: ["npm", "run", "migrate", "-w", "db"]
+    profiles: ["tools"] # excluded from a plain `up`/`up -d`; run explicitly with `run --rm migrate`
